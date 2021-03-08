@@ -6,13 +6,13 @@
 #define LED_PIN      13       // GPIO pin (on-board LED)
 
 #define V0           2.5      // Voltage refering to home position of platform
-#define Vlim_Up      4        // Maximum allowed voltage to provide to amplifier
+#define Vlim_Up      2        // Maximum allowed voltage to provide to amplifier
 
 #define ADC_PIN      A0       // Analog pin to read position input
 #define ADC_RES      1023     // Maximum resolution of analog to digital converter
 #define ADC_VREF     5        // ADC reference voltage
 
-#define PWM_PIN      3        // PWM pin to control amplifier (basic PWM)
+#define PWM_PIN      12        // PWM pin to control amplifier (basic PWM)
 
 #define PRESCALER    256      // Prescaler digital value
 #define BOARD_Freq   16000000 // Arduino Mega 2560 board frequency in Hz
@@ -104,7 +104,8 @@ static float apply_PID(float Vin)
     output = proportional_part + integral_part + differential_part;
   }
   // Convert value to 16 bit integer and send to PWM
-  uint8_t dig_output = (uint8_t)output;
+  uint8_t dig_output = (uint8_t)(output*256/5);
+  Serial.println(dig_output);
   analogWrite(PWM_PIN, dig_output);
   return output;
 }
@@ -125,7 +126,7 @@ ISR(TIMER1_COMPA_vect)
 }
 
 void loop() {
-  float Vin = 0;
+  float Vin = analogRead(A0);
   float output;
   if (!buffer.isEmpty())
   {
@@ -135,6 +136,6 @@ void loop() {
     lcd.print("PWM = "); lcd.print(output,4);
     lcd.setCursor(0,1);
     lcd.print("BUFFER LINE");
-    Serial.println(buffer.size());
+    //Serial.println(buffer.size());
   }
 }
