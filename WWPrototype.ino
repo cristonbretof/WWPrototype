@@ -128,20 +128,21 @@ static float apply_PID(float Vin)
 
   // Calculate portions of PID
   float proportional_part = Kp * err;
-  float integral_part = (Ki * int_err * (1 / FREQUENCY));
-  float differential_part = (Kd * diff_err / (1 / FREQUENCY));
+  float integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
+  float differential_part = (Kd * diff_err / (float)(1 / (float)(FREQUENCY)));
 
   output = proportional_part + integral_part + differential_part;
   if (output >= Vlim_Up)
   {
     // Set value to absolute max
-    integral_part = (Ki * temp_int * (1 / FREQUENCY));
+    integral_part = (Ki * temp_int * (float)(1 / (float)(FREQUENCY)));
     output = proportional_part + integral_part + differential_part;
   }
   // Convert value to 16 bit integer and send to PWM
   //uint8_t dig_output = (uint8_t)(output*256/5);
   //analogWrite(PWM_PIN, dig_output);
   
+  /*
   Serial.println("err");
   Serial.println(err);
   Serial.println("int_err");
@@ -152,6 +153,8 @@ static float apply_PID(float Vin)
   Serial.println(Kd);
   Serial.println("FREQUENCY");
   Serial.println(FREQUENCY);
+  Serial.println("1 / FREQUENCY");
+  Serial.println(1 / FREQUENCY);
   Serial.println("proportional_part");
   Serial.println(proportional_part);
   Serial.println("integral_part");
@@ -160,6 +163,7 @@ static float apply_PID(float Vin)
   Serial.println(differential_part);
   Serial.println("output");
   Serial.println(output);
+  */
   
   sendToDAC(output);
   
