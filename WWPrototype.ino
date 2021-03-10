@@ -39,13 +39,20 @@
 
 #define pinBUTTON_UNIT  16   
 #define pinBUTTON_TYPE  15
-#define pinBUTTON_ONOFF 14
+#define pinBUTTON_MENU  14
 #define pinBUTTON_TARE  17
 
 #define CONFIG_STATE    0
 #define SCALE_STATE     1
+#define BENCHMARK_STATE 2
 
-#define BUF_LEN      20
+#define MODE_NORMAL       0
+#define MODE_MOYENNAGE    1
+#define MODE_ETALONNAGE   2
+
+#define BUF_LEN         20
+
+#define NUM_ETALONS     1
 
 /* Symbol arrays */
 String typeArray[NUM_TYPES] = {"1¢","5¢","10¢","25¢","1$","2$","Ø"};
@@ -53,6 +60,9 @@ String unitArray[NUM_UNITS] = {"Oz","g"};
 
 float massTypeGram[NUM_TYPES] = [2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92];
 float massTypeOunce[NUM_TYPES] = [0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958];
+
+/* Tableau masse-courant */
+float tabMasseCourant[NUM_ETALONS];
 
 /* Indices for type and unit ISRs */
 uint8_t unit_index = 0;
@@ -68,7 +78,7 @@ void (*statePtr)(void);
 static uint8_t currentState = CONFIG_STATE;
 
 /* Array of all button pins */
-const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_ONOFF,pinBUTTON_TYPE,pinBUTTON_UNIT,pinBUTTON_TARE};
+const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_MENU,pinBUTTON_TYPE,pinBUTTON_UNIT,pinBUTTON_TARE};
 
 /* Error values declarations */
 static float int_err = 0;
@@ -94,7 +104,7 @@ void setup() {
   Serial.begin(9600);
 
   /* Initialize all button pins to interrupt */
-  attachInterrupt(digitalPinToInterrupt(pinBUTTON_ONOFF), ISR_onoff, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menu, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_TYPE), ISR_type, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_UNIT), ISR_unit, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_TARE), ISR_tare, FALLING);
@@ -234,34 +244,112 @@ ISR(TIMER1_COMPA_vect)
   buffer.push((float)(val)*ADC_VREF/ADC_RES);
 }
 
-void ISR_onoff(void)
+void ISR_menu(void) // Ou select
 {
-  // Reset Arduino on press down
-  // Close Arduino if currently running
-  // Triggers a HW sleep function
-}
-
-void ISR_type(void)
-{
-  type_index++;
-  printSecondLine(typeArray[type_index]);
-  if (type_index == NUM_TYPES-1)
+  if(currentState == SCALE_STATE)
   {
-    type_index = 0;
+    currentState = CONFIG_STATE;
+    statePtr = configState;
+  }
+  else if(currentState == CONFIG_STATE)
+  {
+    if(selectedSate == MODE_ETALONNAGE)
+    {
+     currentState = BENCHMARK_STATE;
+     statePtr = benchmarkState;
+    }
+    else
+    {
+     currentState = SCALE_STATE;
+     statePtr = scaleState;
+    }
+  }
+
+  else
+  {
+    currentState = CONFIG_STATE;
+    statePtr = configState;
   }
 }
 
-void ISR_unit(void)
+void ISR_type(void) // Ou down
 {
-  unit_index++;
-  printFirstLine(unitArray[unit_index]);
-  if (unit_index == NUM_UNITS-1)
+  if(currentState == SCALE_STATE)
   {
-    unit_index = 0;
+    type_index++;
+    printSecondLine(typeArray[type_index]);
+    if (type_index == NUM_TYPES-1)
+    {
+      type_index = 0;
+    }
+  }
+  else if(currentState == CONFIG_STATE)
+  {
+    if(selectedState == MODE_NORMAL)
+    {
+      eraseArrowUp();
+      printArrowDown();
+
+    }
+    
+    else if (selectedState == MODE_MOYENNAGE)
+    {
+      printArrowUp();
+      printArrowDown();
+    }
+
+    else if (selectedState == MODE_ETALONNAGE)
+    {
+      eraseArrowDown();
+      printArrowUp();
+    }
+  }
+}
+
+void ISR_unit(void) // Ou up
+{
+  if(currentState == SCALE_STATE)
+  {
+    unit_index++;
+    printFirstLine(unitArray[unit_index]);
+    if (unit_index == NUM_UNITS-1)
+    {
+      unit_index = 0;
+    }
+  }
+  
+  else if(currentState == CONFIG_STATE)
+  {
+    if(selectedState == MODE_NORMAL)
+    {
+      eraseArrowUp();
+      printArrowDown();
+
+    }
+    
+    else if (selectedState == MODE_MOYENNAGE)
+    {
+      printArrowUp();
+      printArrowDown();
+    }
+
+    else if (selectedState == MODE_ETALONNAGE)
+    {
+      eraseArrowDown();
+      printArrowUp();
+    }
   }
 }
 
 void ISR_tare(void)
 {
-  massTare = currMass;
+  if(currentSate == SCALE_STATE)
+  {
+    massTare = currMass;
+  }
+
+  else if (currentState == BENCHMARK_STATE)
+  {
+    //accpeter la mesure
+  }
 }
