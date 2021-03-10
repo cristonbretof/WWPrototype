@@ -105,7 +105,6 @@ static float apply_PID(float Vin)
   }
   // Convert value to 16 bit integer and send to PWM
   uint8_t dig_output = (uint8_t)(output*256/5);
-  Serial.println(dig_output);
   analogWrite(PWM_PIN, dig_output);
   return output;
 }
