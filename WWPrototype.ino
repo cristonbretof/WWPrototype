@@ -142,6 +142,13 @@ static float apply_PID(float Vin)
   //uint8_t dig_output = (uint8_t)(output*256/5);
   //analogWrite(PWM_PIN, dig_output);
   
+  Serial.println("err");
+  Serial.println(err);
+  Serial.println("output");
+  Serial.println(output);
+  
+  sendToDAC(output)
+  
   return output;
 }
 
