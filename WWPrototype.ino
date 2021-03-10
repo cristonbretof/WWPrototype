@@ -37,8 +37,8 @@
 #define MCP4725_ADDR 0x60   
 //For devices with A0 pulled HIGH, use 0x61
 
-static float int_err;
-static float prev_err;
+static float int_err = 0;
+static float prev_err = 0;
 
 int lookup = 0;// Pour test CAD varaible for navigating through the tables
 float sintab2[100] = 
