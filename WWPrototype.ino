@@ -8,64 +8,129 @@
 #define V0           2.5      // Voltage refering to home position of platform
 #define Vlim_Up      4        // Maximum allowed voltage to provide to amplifier
 
-#define ADC_PIN      A0       // Analog pin to read position input
+#define pinADC       A0       // Analog pin to read position input
 #define ADC_RES      1023     // Maximum resolution of analog to digital converter
 #define ADC_VREF     5        // ADC reference voltage
 
-#define PWM_PIN      3        // PWM pin to control amplifier (basic PWM)
+#define pinCURRENT   A1       // 
+
+#define pinPWM       3        // PWM pin to control amplifier (basic PWM)
 
 #define PRESCALER    256      // Prescaler digital value
 #define BOARD_Freq   16000000 // Arduino Mega 2560 board frequency in Hz
 #define MAX_FREQ     129      // Absolute maximum frequency
-#define FREQUENCY    100
+#define FREQUENCY    100      // Currently used frequency
 
 #define Kp           1        // Proportional gain
 #define Ki           2        // Integral gain
 #define Kd           1        // Differential gain
 
-#define BUF_LEN 20
+#define pinRS        7       
+#define pinE         8
+#define pinD4        9
+#define pinD5        10
+#define pinD6        11
+#define pinD7        12
 
-static float int_err;
-static float prev_err;
+#define NUM_TYPES       7
+#define NUM_UNITS       2
+
+#define NUM_BUTTONS     4
+
+#define pinBUTTON_UNIT  16   
+#define pinBUTTON_TYPE  15
+#define pinBUTTON_ONOFF 14
+#define pinBUTTON_TARE  17
+
+#define CONFIG_STATE    0
+#define SCALE_STATE     1
+
+#define BUF_LEN      20
+
+/* Symbol arrays */
+String typeArray[NUM_TYPES] = {"1¢","5¢","10¢","25¢","1$","2$","Ø"};
+String unitArray[NUM_UNITS] = {"Oz","g"};
+
+float massTypeGram[NUM_TYPES] = [2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92];
+float massTypeOunce[NUM_TYPES] = [0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958];
+
+/* Indices for type and unit ISRs */
+uint8_t unit_index = 0;
+uint8_t type_index = 0;
+
+/* Main data configurations */
+float massTare = 0;
+float currMass = 0;
+uint8_t currNumCoins = 0;
+
+/* Pointer to current state */
+void (*statePtr)(void);
+static uint8_t currentState = CONFIG_STATE;
+
+/* Array of all button pins */
+const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_ONOFF,pinBUTTON_TYPE,pinBUTTON_UNIT,pinBUTTON_TARE};
+
+/* Error values declarations */
+static float int_err = 0;
+static float prev_err = 0;
+
+/* Function declarations */
+static void scaleState(void);
+static float apply_PID(float Vin);
+void setInputFlags(void);
+void setupTimer();
+void inputAction(uint8_t id);
 
 CircularBuffer<float, BUF_LEN> buffer;
 
 /* Initialize LCD board */
-LiquidCrystal lcd = LiquidCrystal(12, 11, 5, 4, 3, 2);
+LiquidCrystal lcd = LiquidCrystal(pinRS, pinE, pinD4, pinD5, pinD6, pinD7);
 
-void setupTimer() {
-  /* Disable interrupts */
-  noInterrupts();
+///////////////////////
+// ARDUINO FONCTIONS //
+///////////////////////
 
-  TCCR1A = 0;
-  TCCR1B = 0;
-  TCNT1 = 0;
-
-  /* Set compare register for desired frequency */
-  OCR1A = (int)(BOARD_Freq/PRESCALER/FREQUENCY-1);
-  Serial.println(OCR1A);
-
-  TCCR1B |= (1 << WGM12);  // Turn on CTC mode
-  TCCR1B |= (1 << CS12);   // Set prescaler to 8
-  
-  TIMSK1 |= (1 << OCIE1A); // Enable timer for compare interrupt
-
-  /* Reenable interrupts */
-  interrupts();
-}
-
-// ARDUINO CODE BEGIN
 void setup() {
-  pinMode(LED_PIN, OUTPUT);
-
   Serial.begin(9600);
+
+  /* Initialize all button pins to interrupt */
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_ONOFF), ISR_onoff, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_TYPE), ISR_type, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_UNIT), ISR_unit, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_TARE), ISR_tare, FALLING);
 
   /* Start the LCD display */
   Serial.println("LCD init");
   lcd.begin(16, 2);
 
+  statePtr = scaleState;
+
   setupTimer();
 }
+
+void loop()
+{
+  statePtr();
+}
+
+///////////////////////
+//  PRINT FONCTIONS  //
+///////////////////////
+void printFirstLine(String unit)
+{
+  lcd.setCursor(0,0);
+  lcd.print("MASSE: " currMass " " unit);
+}
+
+void printSecondLine(String type)
+{
+  lcd.setCursor(1,0);
+  lcd.print(currNumCoins " x " type);
+}
+
+///////////////////////
+// UTILITY FONCTIONS //
+///////////////////////
 
 /**
    @brief Fonction appliquant le PID sur les intrants
@@ -105,26 +170,37 @@ static float apply_PID(float Vin)
   }
   // Convert value to 16 bit integer and send to PWM
   uint8_t dig_output = (uint8_t)output;
-  analogWrite(PWM_PIN, dig_output);
+  analogWrite(pinPWM, dig_output);
   return output;
 }
 
-/**
-   @brief Timer d'échantillonnage de la tension en entrée
+void setupTimer() {
+  /* Disable interrupts */
+  noInterrupts();
 
-   @details Cette routine prend en charge la captation de la valeur de l'ADC
-            (position) au temps = Ts. Il recharge le timer pour qu'il y ait
-            une autre interruption et il place la valeur de l'ADC
-*/
-ISR(TIMER1_COMPA_vect)
-{
-  unsigned short val = 0;
-//  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
-  val = analogRead(ADC_PIN);
-  buffer.push((float)(val)*ADC_VREF/ADC_RES);
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+
+  /* Set compare register for desired frequency */
+  OCR1A = (int)(BOARD_Freq/PRESCALER/FREQUENCY-1);
+  Serial.println(OCR1A);
+
+  TCCR1B |= (1 << WGM12);  // Turn on CTC mode
+  TCCR1B |= (1 << CS12);   // Set prescaler to 8
+  
+  TIMSK1 |= (1 << OCIE1A); // Enable timer for compare interrupt
+
+  /* Reenable interrupts */
+  interrupts();
 }
 
-void loop() {
+/////////////////////
+// STATE FONCTIONS //
+/////////////////////
+
+static void scaleState(void)
+{
   float Vin = 0;
   float output;
   if (!buffer.isEmpty())
@@ -137,4 +213,55 @@ void loop() {
     lcd.print("BUFFER LINE");
     Serial.println(buffer.size());
   }
+}
+
+/////////////////////
+//    INTERRUPTS   //
+/////////////////////
+
+/**
+   @brief Timer d'échantillonnage de la tension en entrée
+
+   @details Cette routine prend en charge la captation de la valeur de l'ADC
+            (position) au temps = Ts. Il recharge le timer pour qu'il y ait
+            une autre interruption et il place la valeur de l'ADC
+*/
+ISR(TIMER1_COMPA_vect)
+{
+  unsigned short val = 0;
+//  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+  val = analogRead(pinADC);
+  buffer.push((float)(val)*ADC_VREF/ADC_RES);
+}
+
+void ISR_onoff(void)
+{
+  // Reset Arduino on press down
+  // Close Arduino if currently running
+  // Triggers a HW sleep function
+}
+
+void ISR_type(void)
+{
+  type_index++;
+  printSecondLine(typeArray[type_index]);
+  if (type_index == NUM_TYPES-1)
+  {
+    type_index = 0;
+  }
+}
+
+void ISR_unit(void)
+{
+  unit_index++;
+  printFirstLine(unitArray[unit_index]);
+  if (unit_index == NUM_UNITS-1)
+  {
+    unit_index = 0;
+  }
+}
+
+void ISR_tare(void)
+{
+  massTare = currMass;
 }
