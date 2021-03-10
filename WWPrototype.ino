@@ -27,6 +27,9 @@
 
 #define BUF_LEN 20
 
+#define DAC_RES      4096     // Maximum resolution of digital to analog converter
+#define DAC_VREF     5        // DAC reference voltage
+
 //This is the I2C Address of the MCP4725, by default (A0 pulled to GND).
 //Please note that this breakout is for the MCP4725A0. 
 #define MCP4725_ADDR 0x60   
@@ -183,9 +186,20 @@ static float apply_PID(float Vin)
     output = proportional_part + integral_part + differential_part;
   }
   // Convert value to 16 bit integer and send to PWM
-  uint8_t dig_output = (uint8_t)(output*256/5);
-  analogWrite(PWM_PIN, dig_output);
+  //uint8_t dig_output = (uint8_t)(output*256/5);
+  //analogWrite(PWM_PIN, dig_output);
+  
   return output;
+}
+
+void sendToDAC(int outputDAC)
+{
+	/* Fonction qui permet de prendre un int et de communiquer avec le DAC with I2C */
+  Wire.beginTransmission(MCP4725_ADDR);
+  Wire.write(64);                     // cmd to update the DAC
+  Wire.write(outputDAC >> 4);        // the 8 most significant bits...
+  Wire.write((outputDAC & 15) << 4); // the 4 least significant bits...
+  Wire.endTransmission();
 }
 
 /**
@@ -216,12 +230,8 @@ void loop() {
     lcd.print("BUFFER LINE");
     //Serial.println(buffer.size());
   }
-
-  /* Pour test CAD */
-  Wire.beginTransmission(MCP4725_ADDR);
-  Wire.write(64);                     // cmd to update the DAC
-  Wire.write(sintab2[lookup] >> 4);        // the 8 most significant bits...
-  Wire.write((sintab2[lookup] & 15) << 4); // the 4 least significant bits...
-  Wire.endTransmission();
+  
+  //Test DAC
+  sendToDAC(sintab2[lookup]);
   lookup = (lookup + 1) & 511;
 }
