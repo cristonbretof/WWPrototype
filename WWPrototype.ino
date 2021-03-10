@@ -147,7 +147,7 @@ static float apply_PID(float Vin)
   Serial.println("output");
   Serial.println(output);
   
-  sendToDAC(output)
+  sendToDAC(output);
   
   return output;
 }
