@@ -144,6 +144,10 @@ static float apply_PID(float Vin)
   
   Serial.println("err");
   Serial.println(err);
+  Serial.println("int_err");
+  Serial.println(int_err);
+  Serial.println("diff_err");
+  Serial.println(diff_err);
   Serial.println("proportional_part");
   Serial.println(proportional_part);
   Serial.println("integral_part");
