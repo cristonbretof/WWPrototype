@@ -42,10 +42,6 @@
 #define pinBUTTON_MENU  14
 #define pinBUTTON_TARE  17
 
-#define CONFIG_STATE    0
-#define SCALE_STATE     1
-#define BENCHMARK_STATE 2
-
 #define MODE_NORMAL       0
 #define MODE_MOYENNAGE    1
 #define MODE_ETALONNAGE   2
@@ -54,15 +50,25 @@
 
 #define NUM_ETALONS     1
 
+typedef enum {
+  CONFIG_STATE = 0,
+  SCALE_STATE = 1,
+  BENCHMARK_STATE = 2,
+  PROCESS_STATE = 3
+} state_t;
+
+typedef enum {
+  MODE_NORMAL = 0,
+  MODE_MOYENNAGE = 1,
+  MODE_ETALONNAGE = 2
+} mode_t;
+
 /* Symbol arrays */
 String typeArray[NUM_TYPES] = {"1¢","5¢","10¢","25¢","1$","2$","Ø"};
 String unitArray[NUM_UNITS] = {"Oz","g"};
 
 float massTypeGram[NUM_TYPES] = [2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92];
 float massTypeOunce[NUM_TYPES] = [0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958];
-
-/* Tableau masse-courant */
-float tabMasseCourant[NUM_ETALONS];
 
 /* Indices for type and unit ISRs */
 uint8_t unit_index = 0;
@@ -75,7 +81,8 @@ uint8_t currNumCoins = 0;
 
 /* Pointer to current state */
 void (*statePtr)(void);
-static uint8_t currentState = CONFIG_STATE;
+static state_t currentState = CONFIG_STATE;
+static mode_t selectedMode = MODE_NORMAL;
 
 /* Array of all button pins */
 const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_MENU,pinBUTTON_TYPE,pinBUTTON_UNIT,pinBUTTON_TARE};
@@ -85,13 +92,34 @@ static float int_err = 0;
 static float prev_err = 0;
 
 /* Function declarations */
+static void processState(void);
+static void configState(void);
 static void scaleState(void);
 static float apply_PID(float Vin);
-void setInputFlags(void);
 void setupTimer();
-void inputAction(uint8_t id);
 
-CircularBuffer<float, BUF_LEN> buffer;
+/* Up and down LCD character definitions */
+byte up[8] = {
+  B00100,
+  B01110,
+  B11111,
+  B01110,
+  B01110,
+  B00000,
+  B00000,
+};
+byte down[8] = {
+  B00000,
+  B00000,
+  B01110,
+  B01110,
+  B11111,
+  B01110,
+  B00100,
+};
+
+CircularBuffer<float, BUF_LEN> scaleBuffer;
+CircularBuffer<uint16_t, NUM_ETALONS> benchmarkBuffer;
 
 /* Initialize LCD board */
 LiquidCrystal lcd = LiquidCrystal(pinRS, pinE, pinD4, pinD5, pinD6, pinD7);
@@ -103,10 +131,14 @@ LiquidCrystal lcd = LiquidCrystal(pinRS, pinE, pinD4, pinD5, pinD6, pinD7);
 void setup() {
   Serial.begin(9600);
 
+  /* Create both up and down arrows */
+  lcd.createChar(0, up);
+  lcd.createChar(1, down);
+
   /* Initialize all button pins to interrupt */
-  attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menu, FALLING);
-  attachInterrupt(digitalPinToInterrupt(pinBUTTON_TYPE), ISR_type, FALLING);
-  attachInterrupt(digitalPinToInterrupt(pinBUTTON_UNIT), ISR_unit, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menuSelect, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_TYPE), ISR_buttonA, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_UNIT), ISR_buttonB, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_TARE), ISR_tare, FALLING);
 
   /* Start the LCD display */
@@ -136,6 +168,30 @@ void printSecondLine(String type)
 {
   lcd.setCursor(1,0);
   lcd.print(currNumCoins " x " type);
+}
+
+void printArrowUp()
+{
+  lcd.setCursor(0,15);
+  lcd.write(byte(1));
+}
+
+void printArrowDown()
+{
+  lcd.setCursor(1,15);
+  lcd.write(byte(0));
+}
+
+void eraseArrowUp()
+{
+  lcd.setCursor(0,15);
+  lcd.write(" ");
+}
+
+void eraseArrowDown()
+{
+  lcd.setCursor(1,15);
+  lcd.write(" ");
 }
 
 ///////////////////////
@@ -205,23 +261,49 @@ void setupTimer() {
   interrupts();
 }
 
+void incrementBenchmark(uint16_t val)
+{
+  benchmarkBuffer.push(val);
+  if (benchmarkBuffer.isFull())
+  {
+    currentState = PROCESS_STATE;
+    statePtr = processState;
+  }
+}
+
 /////////////////////
 // STATE FONCTIONS //
 /////////////////////
+
+static void processState(void)
+{
+  lcd.clear();
+  
+}
+
+static void configState(void)
+{
+  
+}
+
+static void benchmarkState(void)
+{
+  
+}
 
 static void scaleState(void)
 {
   float Vin = 0;
   float output;
-  if (!buffer.isEmpty())
+  if (!scaleBuffer.isEmpty())
   {
-    Vin = buffer.pop();
+    Vin = scaleBuffer.pop();
     output = apply_PID(Vin);
     lcd.setCursor(0,0);
     lcd.print("PWM = "); lcd.print(output,4);
     lcd.setCursor(0,1);
     lcd.print("BUFFER LINE");
-    Serial.println(buffer.size());
+    Serial.println(scaleBuffer.size());
   }
 }
 
@@ -241,10 +323,10 @@ ISR(TIMER1_COMPA_vect)
   unsigned short val = 0;
 //  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
   val = analogRead(pinADC);
-  buffer.push((float)(val)*ADC_VREF/ADC_RES);
+  scaleBuffer.push((float)(val)*ADC_VREF/ADC_RES);
 }
 
-void ISR_menu(void) // Ou select
+void ISR_menuSelect(void) // Ou select
 {
   if(currentState == SCALE_STATE)
   {
@@ -253,18 +335,17 @@ void ISR_menu(void) // Ou select
   }
   else if(currentState == CONFIG_STATE)
   {
-    if(selectedSate == MODE_ETALONNAGE)
+    if(selectedMode == MODE_ETALONNAGE)
     {
-     currentState = BENCHMARK_STATE;
-     statePtr = benchmarkState;
+      currentState = BENCHMARK_STATE;
+      statePtr = benchmarkState;
     }
     else
     {
-     currentState = SCALE_STATE;
-     statePtr = scaleState;
+      currentState = SCALE_STATE;
+      statePtr = scaleState;
     }
   }
-
   else
   {
     currentState = CONFIG_STATE;
@@ -272,7 +353,7 @@ void ISR_menu(void) // Ou select
   }
 }
 
-void ISR_type(void) // Ou down
+void ISR_buttonA(void) // Ou down
 {
   if(currentState == SCALE_STATE)
   {
@@ -285,20 +366,17 @@ void ISR_type(void) // Ou down
   }
   else if(currentState == CONFIG_STATE)
   {
-    if(selectedState == MODE_NORMAL)
+    if(selectedMode == MODE_NORMAL)
     {
       eraseArrowUp();
       printArrowDown();
-
     }
-    
-    else if (selectedState == MODE_MOYENNAGE)
+    else if (selectedMode == MODE_MOYENNAGE)
     {
       printArrowUp();
       printArrowDown();
     }
-
-    else if (selectedState == MODE_ETALONNAGE)
+    else if (selectedMode == MODE_ETALONNAGE)
     {
       eraseArrowDown();
       printArrowUp();
@@ -306,7 +384,7 @@ void ISR_type(void) // Ou down
   }
 }
 
-void ISR_unit(void) // Ou up
+void ISR_buttonB(void) // Ou up
 {
   if(currentState == SCALE_STATE)
   {
@@ -317,23 +395,19 @@ void ISR_unit(void) // Ou up
       unit_index = 0;
     }
   }
-  
   else if(currentState == CONFIG_STATE)
   {
-    if(selectedState == MODE_NORMAL)
+    if(selectedMode == MODE_NORMAL)
     {
       eraseArrowUp();
       printArrowDown();
-
     }
-    
-    else if (selectedState == MODE_MOYENNAGE)
+    else if (selectedMode == MODE_MOYENNAGE)
     {
       printArrowUp();
       printArrowDown();
     }
-
-    else if (selectedState == MODE_ETALONNAGE)
+    else if (selectedMode == MODE_ETALONNAGE)
     {
       eraseArrowDown();
       printArrowUp();
@@ -347,9 +421,9 @@ void ISR_tare(void)
   {
     massTare = currMass;
   }
-
   else if (currentState == BENCHMARK_STATE)
   {
-    //accpeter la mesure
+    uint16_t val = analogRead(pinCURRENT);
+    incrementBenchmark(val);
   }
 }
