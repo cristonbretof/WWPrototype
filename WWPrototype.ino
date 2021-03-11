@@ -208,7 +208,7 @@ ISR(TIMER1_COMPA_vect)
 }
 
 void loop() {
-  float Vin = analogRead(A0);
+  float Vin = analogRead(A0)*(5.0/1024.0); //Vin, converti en volt
   float output;
   if (!buffer.isEmpty())
   {
