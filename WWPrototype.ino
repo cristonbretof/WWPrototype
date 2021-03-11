@@ -42,13 +42,11 @@
 #define pinBUTTON_MENU  14
 #define pinBUTTON_TARE  17
 
-#define MODE_NORMAL       0
-#define MODE_MOYENNAGE    1
-#define MODE_ETALONNAGE   2
-
 #define BUF_LEN         20
 
-#define NUM_ETALONS     1
+#define NUM_ETALONS     11
+
+#define RES_BOBINE      1.425
 
 typedef enum {
   CONFIG_STATE = 0,
@@ -67,12 +65,16 @@ typedef enum {
 String typeArray[NUM_TYPES] = {"1¢","5¢","10¢","25¢","1$","2$","Ø"};
 String unitArray[NUM_UNITS] = {"Oz","g"};
 
-float massTypeGram[NUM_TYPES] = [2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92];
-float massTypeOunce[NUM_TYPES] = [0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958];
+float massTypeGram[NUM_TYPES] = {2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92};
+float massTypeOunce[NUM_TYPES] = {0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958};
 
 /* Indices for type and unit ISRs */
 uint8_t unit_index = 0;
 uint8_t type_index = 0;
+
+/* Initial slope for current to mass conversion */
+float penteMasseCourant = 1; 
+uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 
 /* Main data configurations */
 float massTare = 0;
@@ -272,13 +274,40 @@ void incrementBenchmark(uint16_t val)
 }
 
 /////////////////////
-// STATE FONCTIONS //
+// STATE FUNCTIONS //
 /////////////////////
 
 static void processState(void)
 {
   lcd.clear();
   
+  /* Calcul de la pente pour le calcul de la masse */
+  
+  /*float tabCourant[NUM_ETALONS];                                // Array contenant les valeur le l'ADC converties en courant
+  for(int i = 0; i < NUM_ETALONS-1; i++)                          // Si jamais les profs veulent le courant
+  {                                                              
+    tabCourant[i] = ((benchmarkBuffer[i]*5)/1023)/RES_BOBINE;
+  }*/
+
+  float tabVoltage[NUM_ETALONS];
+  for(int i = 0; i < NUM_ETALONS-1; i++) 
+  {                                                              
+    tabCourant[i] = (benchmarkBuffer[i]*5)/1023;
+  }
+
+  float tabPentes[NUM_ETALONS];                                 //Array pour stocker le coefficient pour chaque couple
+  for(int i = 0; i < NUM_ETALONS-1; i++)
+  {
+    tabPentes[i] = tabEtalons[i]/tabVoltages[i];
+  }
+
+  float sommePentes = 0;
+  for(int i = 0; i < NUM_ETALONS; i++)                         // Moyenne des coefficients
+  {
+    sommePentes = sommePentes + tabPentes[i];
+  }
+
+  penteMasseCourant = sommePentes/NUM_ETALONS;
 }
 
 static void configState(void)
