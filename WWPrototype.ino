@@ -10,11 +10,11 @@
 
 #define pinADC       A0       // Analog pin to read position input
 #define ADC_RES      1023     // Maximum resolution of analog to digital converter
-#define ADC_VREF     5        // ADC reference voltage
+#define VREF         5        // ADC reference voltage
 
 #define pinCURRENT   A1       // 
 
-#define pinPWM       3        // PWM pin to control amplifier (basic PWM)
+#define pinDAC       3        // PWM pin to control amplifier (basic PWM)
 
 #define PRESCALER    256      // Prescaler digital value
 #define BOARD_Freq   16000000 // Arduino Mega 2560 board frequency in Hz
@@ -43,10 +43,12 @@
 #define pinBUTTON_TARE  17
 
 #define BUF_LEN         20
-
 #define NUM_ETALONS     11
-
 #define RES_BOBINE      1.425
+
+#define CONFIG_STATE_TIMEOUT      200  // Temps entre chaque boucle de l'état de configuration (en ms)
+#define SCALE_STATE_TIMEOUT       10  // Temps entre chaque boucle de l'état de pesé (en ms)
+#define BENCHMARK_STATE_TIMEOUT   200  // Temps entre chaque boucle de l'état d'étalonnage (en ms)
 
 typedef enum {
   CONFIG_STATE = 0,
@@ -80,6 +82,14 @@ uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 float massTare = 0;
 float currMass = 0;
 uint8_t currNumCoins = 0;
+
+/* Unité et type actifs sur l'affichage */
+String currentUnit;
+String currentType;
+
+/* État actuel de l'étalonnage */
+uint16_t currentStep;
+uint8_t step_index = 0;
 
 /* Pointer to current state */
 void (*statePtr)(void);
@@ -119,6 +129,15 @@ byte down[8] = {
   B01110,
   B00100,
 };
+byte full[8] = {
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+  B11111,
+};
 
 CircularBuffer<float, BUF_LEN> scaleBuffer;
 CircularBuffer<uint16_t, NUM_ETALONS> benchmarkBuffer;
@@ -136,6 +155,7 @@ void setup() {
   /* Create both up and down arrows */
   lcd.createChar(0, up);
   lcd.createChar(1, down);
+  lcd.createChar(2, full);
 
   /* Initialize all button pins to interrupt */
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menuSelect, FALLING);
@@ -144,10 +164,11 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_TARE), ISR_tare, FALLING);
 
   /* Start the LCD display */
-  Serial.println("LCD init");
   lcd.begin(16, 2);
 
-  statePtr = scaleState;
+  /*  */
+  currentState = CONFIG_STATE;
+  statePtr = configState;
 
   setupTimer();
 }
@@ -160,16 +181,59 @@ void loop()
 ///////////////////////
 //  PRINT FONCTIONS  //
 ///////////////////////
-void printFirstLine(String unit)
+void printScaleFirstLine(void)
 {
   lcd.setCursor(0,0);
-  lcd.print("MASSE: " currMass " " unit);
+  lcd.print("MASSE: " currMass " " currentUnit);
 }
 
-void printSecondLine(String type)
+void printScaleSecondLine(void)
 {
   lcd.setCursor(1,0);
-  lcd.print(currNumCoins " x " type);
+  lcd.print(currNumCoins " x " currentType);
+}
+
+void printMenuConfig(void)
+{
+  switch(selectedMode)
+  {
+    case MODE_NORMAL:
+      lcd.clear();
+      
+      eraseArrowUp();
+      printArrowDown();
+      
+      lcd.setCursor(0,0);
+      lcd.print("MODE NORMAL");
+      break;
+    case MODE_MOYENNAGE:
+      lcd.clear();
+      
+      printArrowUp();
+      printArrowDown();
+      
+      lcd.setCursor(0,0);
+      lcd.print("MODE MOYENNAGE");
+      break;
+    case MODE_ETALONNAGE:
+      lcd.clear();
+      
+      printArrowUp();
+      eraseArrowDown();
+      
+      lcd.setCursor(0,0);
+      lcd.print("ÉTALONNAGE");
+      break;
+  }
+}
+
+void printBenchmarkSteps(void)
+{
+    lcd.clear();   
+    lcd.setCursor(0,0);
+    lcd.print("Posez une masse");
+    lcd.setCursor(1,0);
+    lcd.print("de : " currentStep "g");
 }
 
 void printArrowUp()
@@ -238,7 +302,7 @@ static float apply_PID(float Vin)
   }
   // Convert value to 16 bit integer and send to PWM
   uint8_t dig_output = (uint8_t)output;
-  analogWrite(pinPWM, dig_output);
+  analogWrite(pinDAC, dig_output);
   return output;
 }
 
@@ -265,59 +329,53 @@ void setupTimer() {
 
 void incrementBenchmark(uint16_t val)
 {
+  currentStep = tabEtalons[step_index];
   benchmarkBuffer.push(val);
   if (benchmarkBuffer.isFull())
   {
     currentState = PROCESS_STATE;
     statePtr = processState;
   }
+  step_index++;
 }
 
 /////////////////////
 // STATE FUNCTIONS //
 /////////////////////
 
+static void configState(void)
+{
+  printMenuConfig();
+  delay(CONFIG_STATE_TIMEOUT);
+}
+
 static void processState(void)
 {
+  float sommePentes = 0;
   lcd.clear();
   
   /* Calcul de la pente pour le calcul de la masse */
-  
-  /*float tabCourant[NUM_ETALONS];                                // Array contenant les valeur le l'ADC converties en courant
-  for(int i = 0; i < NUM_ETALONS-1; i++)                          // Si jamais les profs veulent le courant
-  {                                                              
-    tabCourant[i] = ((benchmarkBuffer[i]*5)/1023)/RES_BOBINE;
-  }*/
-
-  float tabVoltage[NUM_ETALONS];
-  for(int i = 0; i < NUM_ETALONS-1; i++) 
-  {                                                              
-    tabCourant[i] = (benchmarkBuffer[i]*5)/1023;
-  }
-
-  float tabPentes[NUM_ETALONS];                                 //Array pour stocker le coefficient pour chaque couple
-  for(int i = 0; i < NUM_ETALONS-1; i++)
-  {
-    tabPentes[i] = tabEtalons[i]/tabVoltages[i];
-  }
-
-  float sommePentes = 0;
   for(int i = 0; i < NUM_ETALONS; i++)                         // Moyenne des coefficients
   {
-    sommePentes = sommePentes + tabPentes[i];
+    sommePentes = sommePentes + tabEtalons[i]/((benchmarkBuffer.pop()*VREF)/ADC_RES);
+    /* Petite animation durant l'état de processus */
+    lcd.setCursor(i%2,i);
+    lcd.print(byte(2));
   }
-
   penteMasseCourant = sommePentes/NUM_ETALONS;
-}
 
-static void configState(void)
-{
-  
+  /* Affichage particulier suivant le calcul de la pente... */
+
+
+  /* Retour à l'état de configuration */
+  currentState = CONFIG_STATE;
+  statePtr = configState;
 }
 
 static void benchmarkState(void)
 {
-  
+  printBenchmarkSteps();
+  delay(BENCHMARK_STATE_TIMEOUT);
 }
 
 static void scaleState(void)
@@ -328,12 +386,12 @@ static void scaleState(void)
   {
     Vin = scaleBuffer.pop();
     output = apply_PID(Vin);
-    lcd.setCursor(0,0);
-    lcd.print("PWM = "); lcd.print(output,4);
-    lcd.setCursor(0,1);
-    lcd.print("BUFFER LINE");
     Serial.println(scaleBuffer.size());
   }
+  printScaleFirstLine();
+  printScaleSecondLine();
+  
+  delay(SCALE_STATE_TIMEOUT);
 }
 
 /////////////////////
@@ -350,9 +408,9 @@ static void scaleState(void)
 ISR(TIMER1_COMPA_vect)
 {
   unsigned short val = 0;
-//  digitalWrite(LED_PIN, !digitalRead(LED_PIN));
+
   val = analogRead(pinADC);
-  scaleBuffer.push((float)(val)*ADC_VREF/ADC_RES);
+  scaleBuffer.push((float)(val)*VREF/ADC_RES);
 }
 
 void ISR_menuSelect(void) // Ou select
@@ -387,7 +445,7 @@ void ISR_buttonA(void) // Ou down
   if(currentState == SCALE_STATE)
   {
     type_index++;
-    printSecondLine(typeArray[type_index]);
+    currentType = typeArray[type_index];
     if (type_index == NUM_TYPES-1)
     {
       type_index = 0;
@@ -397,18 +455,11 @@ void ISR_buttonA(void) // Ou down
   {
     if(selectedMode == MODE_NORMAL)
     {
-      eraseArrowUp();
-      printArrowDown();
+      selectedMode = MODE_MOYENNAGE;
     }
     else if (selectedMode == MODE_MOYENNAGE)
     {
-      printArrowUp();
-      printArrowDown();
-    }
-    else if (selectedMode == MODE_ETALONNAGE)
-    {
-      eraseArrowDown();
-      printArrowUp();
+      selectedMode = MODE_ETALONNAGE;
     }
   }
 }
@@ -418,7 +469,7 @@ void ISR_buttonB(void) // Ou up
   if(currentState == SCALE_STATE)
   {
     unit_index++;
-    printFirstLine(unitArray[unit_index]);
+    currentUnit = unitArray[unit_index];
     if (unit_index == NUM_UNITS-1)
     {
       unit_index = 0;
@@ -426,20 +477,13 @@ void ISR_buttonB(void) // Ou up
   }
   else if(currentState == CONFIG_STATE)
   {
-    if(selectedMode == MODE_NORMAL)
+    if (selectedMode == MODE_MOYENNAGE)
     {
-      eraseArrowUp();
-      printArrowDown();
-    }
-    else if (selectedMode == MODE_MOYENNAGE)
-    {
-      printArrowUp();
-      printArrowDown();
+      selectedMode = MODE_NORMAL;
     }
     else if (selectedMode == MODE_ETALONNAGE)
     {
-      eraseArrowDown();
-      printArrowUp();
+      selectedMode = MODE_MOYENNAGE;
     }
   }
 }
