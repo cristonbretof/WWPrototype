@@ -169,7 +169,7 @@ static float apply_PID(float Vin)
   Serial.println("output");
   Serial.println(output);
  
-  output = Last_output - output; //Corrige la dernière tension appliquée.
+  output = last_output - output; //Corrige la dernière tension appliquée.
   
   sendToDAC(output);
   
