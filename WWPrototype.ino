@@ -32,6 +32,7 @@
 #define OUTPUT_MAX   5        // Value max of variable output in apply_PID(float Vin)
 #define OUTPUT_MIN   0        // Value max of variable output in apply_PID(float Vin)
 
+#define CURRENT_PIN      A14       // Analog pin to read current.
 
 //This is the I2C Address of the MCP4725, by default (A0 pulled to GND).
 //Please note that this breakout is for the MCP4725A0. 
