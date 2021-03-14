@@ -29,8 +29,8 @@
 
 #define DAC_RES      4096     // Maximum resolution of digital to analog converter
 #define DAC_VREF     5        // DAC reference voltage
-#define OUTPUT_MAX   5        // Value max of variable output in apply_PID(float Vin)
-#define OUTPUT_MIN   0        // Value max of variable output in apply_PID(float Vin)
+#define OUTPUT_MAX   1        // Offre une protection sur la valeur appliquer au DAC.
+#define OUTPUT_MIN   0        // Offre une protection sur la valeur appliquer au DAC.
 
 #define CURRENT_PIN      A14       // Analog pin to read current.
 
@@ -44,25 +44,6 @@ static float prev_err = 0;
 
 float last_output = 0; //Dernière valeur de output
 
-int lookup = 0;// Pour test CAD varaible for navigating through the tables
-float sintab2[100] = 
-{
-  0, 0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4,
-  0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
-  0.85, 0.9, 0.95,
-  1, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4,
-  1.45, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.8,
-  1.85, 1.9, 1.95,
-  2, 2.05, 2.1, 2.15, 2.2, 2.25, 2.3, 2.35, 2.4,
-  2.45, 2.5, 2.55, 2.6, 2.65, 2.7, 2.75, 2.8,
-  2.85, 2.9, 2.95,
-  3, 3.05, 3.1, 3.15, 3.2, 3.25, 3.3, 3.35, 3.4,
-  3.45, 3.5, 3.55, 3.6, 3.65, 3.7, 3.75, 3.8,
-  3.85, 3.9, 3.95,
-  4, 4.05, 4.1, 4.15, 4.2, 4.25, 4.3, 4.35, 4.4,
-  4.45, 4.5, 4.55, 4.6, 4.65, 4.7, 4.75, 4.8,
-  4.85, 4.9, 4.95
-};// Pour test CAD
 
 CircularBuffer<float, BUF_LEN> buffer;
 
@@ -148,7 +129,7 @@ static float apply_PID(float Vin)
   //uint8_t dig_output = (uint8_t)(output*256/5);
   //analogWrite(PWM_PIN, dig_output);
   
-  Serial.println("nouvelle boucle");
+  /*Serial.println("nouvelle boucle");
   Serial.println("err");
   Serial.println(err);
   Serial.println("int_err");
@@ -168,22 +149,24 @@ static float apply_PID(float Vin)
   Serial.println("differential_part");
   Serial.println(differential_part);
   Serial.println("output");
-  Serial.println(output);
+  Serial.println(output);*/
+ 
  
   output = last_output - output; //Corrige la dernière tension appliquée.
   
-  Serial.println("last_output");
+  /*Serial.println("last_output");
   Serial.println(last_output);
   Serial.println("output");
-  Serial.println(output);
+  Serial.println(output);*/
   
- if (output < 0) // Vérifie que output respecte ça valeur min
+//Le if, else if qui suit offre une protection pour de pas avoir des valeurs trop haute ou trop base. Important de la laisser car il arrive que la première erreur donne une erreur complètement erroné et que le PID diverge.  
+if (output < OUTPUT_MIN) // Vérifie que output respecte ça valeur min
 {
-	output = 0;
+	output = OUTPUT_MIN;
 }
-else if (output > 2) // Vérifie que output respecte ça valeur max
+else if (output > OUTPUT_MAX) // Vérifie que output respecte ça valeur max
 {
-	output = 2;
+	output = OUTPUT_MAX;
 }
   
   sendToDAC(output);
@@ -194,15 +177,6 @@ else if (output > 2) // Vérifie que output respecte ça valeur max
 void sendToDAC(float outputDAC)
 {
 	/* Fonction qui permet de prendre un float et de communiquer avec le DAC with I2C */
-	
-	if (outputDAC < OUTPUT_MIN) // Vérifie que output respecte ça valeur min
-	{
-		outputDAC = OUTPUT_MIN;
-	}
-	else if (outputDAC > OUTPUT_MAX) // Vérifie que output respecte ça valeur max
-	{
-		outputDAC = OUTPUT_MAX;
-	}
 	
 	int outputDACint = round(outputDAC * (DAC_RES/DAC_VREF)); // Converti l'argument transmit en int en fonction de la résolution et de la valeur de référence du DAC
 	
@@ -242,17 +216,4 @@ void loop() {
     lcd.print("BUFFER LINE");
     //Serial.println(buffer.size());
   }
-
-/*  
-  //Test DAC
-  sendToDAC(sintab2[lookup]);
-  if (lookup < 99)
-  {
-	  lookup = lookup + 1;
-  }
-  else
-  {
-	  lookup = 0;
-  }
-  //lookup = (lookup + 1) & 99;
-*/}
+}
