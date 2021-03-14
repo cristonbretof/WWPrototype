@@ -135,8 +135,9 @@ static float apply_PID(float Vin)
   if (output >= Vlim_Up)
   {
 	Serial.println("Windup");
+	int_err = temp_int; //Remet l'ancienne int_erre
     // Set value to absolute max
-    integral_part = (Ki * temp_int * (float)(1 / (float)(FREQUENCY)));
+    integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
     output = proportional_part + integral_part + differential_part;
   }
   // Convert value to 16 bit integer and send to PWM
