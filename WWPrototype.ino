@@ -10,7 +10,7 @@
 #define V0           2.5      // Voltage refering to home position of platform
 #define Vlim_Up      2        // Maximum allowed voltage to provide to amplifier
 
-#define ADC_PIN      A0       // Analog pin to read position input
+#define ADC_PIN      A15       // Analog pin to read position input
 #define ADC_RES      1023     // Maximum resolution of analog to digital converter
 #define ADC_VREF     5        // ADC reference voltage
 
@@ -21,9 +21,9 @@
 #define MAX_FREQ     129      // Absolute maximum frequency
 #define FREQUENCY    100
 
-#define Kp           0.1        // Proportional gain
+#define Kp           0.01        // Proportional gain
 #define Ki           0.2        // Integral gain
-#define Kd           0.1        // Differential gain
+#define Kd           0.001        // Differential gain
 
 #define BUF_LEN 20
 
@@ -169,7 +169,7 @@ static float apply_PID(float Vin)
   Serial.println("output");
   Serial.println(output);
  
-  output = last_output + output; //Corrige la dernière tension appliquée.
+  output = last_output - output; //Corrige la dernière tension appliquée.
   
   Serial.println("last_output");
   Serial.println(last_output);
