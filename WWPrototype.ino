@@ -22,6 +22,9 @@
 #define MAX_FREQ     129      // Absolute maximum frequency
 #define FREQUENCY    100      // Currently used frequency
 
+#define MASS_ERROR   0.3
+#define GRAMS_TO_OZ  0.035274
+
 #define Kp           1        // Proportional gain
 #define Ki           2        // Integral gain
 #define Kd           1        // Differential gain
@@ -33,8 +36,8 @@
 #define pinD6        11
 #define pinD7        12
 
-#define NUM_TYPES       7
-#define NUM_UNITS       2
+#define NUM_TYPES    7
+#define NUM_UNITS    2
 
 #define DAC_RES      4096     // Maximum resolution of digital to analog converter
 #define DAC_VREF     5        // DAC reference voltage
@@ -45,9 +48,6 @@
 //Please note that this breakout is for the MCP4725A0. 
 #define MCP4725_ADDR 0x60   
 //For devices with A0 pulled HIGH, use 0x61
-
-static float int_err = 0;
-static float prev_err = 0;
 
 int lookup = 0;// Pour test CAD varaible for navigating through the tables
 float sintab2[100] = 
@@ -78,7 +78,7 @@ float sintab2[100] =
 
 #define BUF_LEN         20
 #define NUM_ETALONS     11
-#define RES_BOBINE      1.425
+#define AVG_SAMPLES     3
 
 #define CONFIG_STATE_TIMEOUT      200  // Temps entre chaque boucle de l'état de configuration (en ms)
 #define SCALE_STATE_TIMEOUT       10  // Temps entre chaque boucle de l'état de pesé (en ms)
@@ -99,7 +99,7 @@ typedef enum {
 
 /* Symbol arrays */
 String typeArray[NUM_TYPES] = {"1¢","5¢","10¢","25¢","1$","2$","Ø"};
-String unitArray[NUM_UNITS] = {"Oz","g"};
+String unitArray[NUM_UNITS] = {"oz","g"};
 
 float massTypeGram[NUM_TYPES] = {2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92};
 float massTypeOunce[NUM_TYPES] = {0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958};
@@ -115,6 +115,7 @@ uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 /* Main data configurations */
 float massTare = 0;
 float currMass = 0;
+float prevMass = 0;
 uint8_t currNumCoins = 0;
 
 /* Unité et type actifs sur l'affichage */
@@ -122,7 +123,7 @@ String currentUnit;
 String currentType;
 
 /* État actuel de l'étalonnage */
-uint16_t currentStep;
+uint16_t currentStep = 0;
 uint8_t step_index = 0;
 
 /* Pointer to current state */
@@ -146,13 +147,14 @@ void setupTimer();
 
 /* Up and down LCD character definitions */
 byte up[8] = {
+  B00000,
   B00100,
   B01110,
   B11111,
   B01110,
   B01110,
   B00000,
-  B00000,
+  B00000
 };
 byte down[8] = {
   B00000,
@@ -162,6 +164,7 @@ byte down[8] = {
   B11111,
   B01110,
   B00100,
+  B00000
 };
 byte full[8] = {
   B11111,
@@ -171,8 +174,21 @@ byte full[8] = {
   B11111,
   B11111,
   B11111,
+  B11111
+};
+byte stable[8] = {
+  B00000,
+  B00000,
+  B01010,
+  B01010,
+  B00000,
+  B10001,
+  B01110,
+  B00000
 };
 
+
+CircularBuffer<uint16_t, AVG_SAMPLES> avgBuffer;
 CircularBuffer<float, BUF_LEN> scaleBuffer;
 CircularBuffer<uint16_t, NUM_ETALONS> benchmarkBuffer;
 
@@ -190,6 +206,7 @@ void setup() {
   lcd.createChar(0, up);
   lcd.createChar(1, down);
   lcd.createChar(2, full);
+  lcd.createChar(3, stable);
 
   /* Initialize all button pins to interrupt */
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menuSelect, FALLING);
@@ -221,13 +238,18 @@ void loop()
 void printScaleFirstLine(void)
 {
   lcd.setCursor(0,0);
-  lcd.print("MASSE: " currMass " " currentUnit);
+  lcd.print("MASSE: ");
+  lcd.print(currMass,2);
+  lcd.print(" ");
+  lcd.print(currentUnit);
 }
 
 void printScaleSecondLine(void)
 {
   lcd.setCursor(1,0);
-  lcd.print(currNumCoins " x " currentType);
+  lcd.print(currNumCoins);
+  lcd.print(" x ");
+  lcd.print(currentType);
 }
 
 void printMenuConfig(void)
@@ -264,13 +286,30 @@ void printMenuConfig(void)
   }
 }
 
+void printStabilitySymbol(void)
+{
+  lcd.setCursor(1,15);
+  lcd.write(byte(3));
+}
+
 void printBenchmarkSteps(void)
 {
     lcd.clear();   
     lcd.setCursor(0,0);
-    lcd.print("Posez une masse");
-    lcd.setCursor(1,0);
-    lcd.print("de : " currentStep "g");
+    if (currentStep != 0)
+    {
+      lcd.print("Posez une masse");
+      lcd.setCursor(1,0);
+      lcd.print("de : ");
+      lcd.print(currentStep);
+      lcd.print("g");
+    }
+    else
+    {
+      lcd.print("Retirez le poids");
+      lcd.setCursor(1,0);
+      lcd.print("de la balance");
+    }
 }
 
 void printArrowUp()
@@ -311,7 +350,7 @@ void eraseArrowDown()
 static float apply_PID(float Vin)
 {
   float output;
-  
+
   // Calculate positionning error
   float err = V0 - Vin;
 
@@ -336,36 +375,8 @@ static float apply_PID(float Vin)
     // Set value to absolute max
     integral_part = (Ki * temp_int * (float)(1 / (float)(FREQUENCY)));
     output = proportional_part + integral_part + differential_part;
-  }
-  // Convert value to 16 bit integer and send to PWM
-  //uint8_t dig_output = (uint8_t)(output*256/5);
-  //analogWrite(PWM_PIN, dig_output);
-  
-  /*
-  Serial.println("err");
-  Serial.println(err);
-  Serial.println("int_err");
-  Serial.println(int_err);
-  Serial.println("diff_err");
-  Serial.println(diff_err);
-  Serial.println("Kd");
-  Serial.println(Kd);
-  Serial.println("FREQUENCY");
-  Serial.println(FREQUENCY);
-  Serial.println("1 / FREQUENCY");
-  Serial.println(1 / FREQUENCY);
-  Serial.println("proportional_part");
-  Serial.println(proportional_part);
-  Serial.println("integral_part");
-  Serial.println(integral_part);
-  Serial.println("differential_part");
-  Serial.println(differential_part);
-  Serial.println("output");
-  Serial.println(output);
-  */
-  
+  }  
   sendToDAC(output);
-  
   return output;
 }
 
@@ -402,6 +413,26 @@ void incrementBenchmark(uint16_t val)
   step_index++;
 }
 
+void calculateAvgMass(void)
+{
+  uint32_t sum = 0;
+  while (!avgBuffer.isEmpty())
+  {
+    sum += avgBuffer.pop();
+  }
+  
+  currMass = (float)(penteMasseCourant*(sum/AVG_SAMPLES));
+  if (currentUnit == "oz")
+  {
+    currMass *= GRAMS_TO_OZ;
+  }
+}
+
+void calculateNumCoins(void)
+{
+  currNumCoins = floor(currMass/massTypeGram[type_index]);
+}
+
 /////////////////////
 // STATE FUNCTIONS //
 /////////////////////
@@ -429,7 +460,6 @@ static void processState(void)
 
   /* Affichage particulier suivant le calcul de la pente... */
 
-
   /* Retour à l'état de configuration */
   currentState = CONFIG_STATE;
   statePtr = configState;
@@ -449,12 +479,25 @@ static void scaleState(void)
   {
     Vin = scaleBuffer.pop();
     output = apply_PID(Vin);
-    Serial.println(scaleBuffer.size());
+    if (selectedMode == MODE_MOYENNAGE)
+    {
+      if (avgBuffer.isFull())
+      {
+        calculateAvgMass();
+      }
+      else
+      {
+        avgBuffer.push(analogRead(pinCURRENT)); 
+      }
+    }
+  }
+  if (abs(currMass - prevMass) < MASS_ERROR)
+  {
+    printStabilitySymbol();
   }
   printScaleFirstLine();
-  printScaleSecondLine();
-  
   delay(SCALE_STATE_TIMEOUT);
+  printScaleSecondLine();
 }
 
 /////////////////////
@@ -575,7 +618,7 @@ void ISR_buttonB(void) // Ou up
 
 void ISR_tare(void)
 {
-  if(currentSate == SCALE_STATE)
+  if(currentState == SCALE_STATE)
   {
     massTare = currMass;
   }
@@ -585,16 +628,3 @@ void ISR_tare(void)
     incrementBenchmark(val);
   }
 }
-/*  
-  //Test DAC
-  sendToDAC(sintab2[lookup]);
-  if (lookup < 99)
-  {
-	  lookup = lookup + 1;
-  }
-  else
-  {
-	  lookup = 0;
-  }
-  //lookup = (lookup + 1) & 99;
-*/
