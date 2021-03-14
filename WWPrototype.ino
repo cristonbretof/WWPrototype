@@ -32,6 +32,8 @@
 #define OUTPUT_MAX   5        // Value max of variable output in apply_PID(float Vin)
 #define OUTPUT_MIN   0        // Value max of variable output in apply_PID(float Vin)
 
+#define Last_output  0        //Dernière valeur de output
+
 //This is the I2C Address of the MCP4725, by default (A0 pulled to GND).
 //Please note that this breakout is for the MCP4725A0. 
 #define MCP4725_ADDR 0x60   
@@ -166,6 +168,7 @@ static float apply_PID(float Vin)
   Serial.println("output");
   Serial.println(output);
  
+  output = Last_output - output; //Corrige la dernière tension appliquée.
   
   sendToDAC(output);
   
@@ -216,6 +219,7 @@ void loop() {
   {
     Vin = buffer.pop();
     output = apply_PID(Vin);
+	Last_output = output;
     lcd.setCursor(0,0);
     lcd.print("PWM = "); lcd.print(output,4);
     lcd.setCursor(0,1);
