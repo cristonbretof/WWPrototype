@@ -135,7 +135,7 @@ static float apply_PID(float Vin)
   float differential_part = (Kd * diff_err / (float)(1 / (float)(FREQUENCY)));
 
   output = proportional_part + integral_part + differential_part;
-  if (output >= Vlim_Up)
+  if (output >= Vlim_Up || output <= -Vlim_Up)
   {
 	Serial.println("Windup");
 	int_err = temp_int; //Remet l'ancienne int_erre
@@ -147,7 +147,7 @@ static float apply_PID(float Vin)
   //uint8_t dig_output = (uint8_t)(output*256/5);
   //analogWrite(PWM_PIN, dig_output);
   
-  
+  Serial.println("nouvelle boucle");
   Serial.println("err");
   Serial.println(err);
   Serial.println("int_err");
@@ -170,6 +170,11 @@ static float apply_PID(float Vin)
   Serial.println(output);
  
   output = last_output - output; //Corrige la dernière tension appliquée.
+  
+  Serial.println("last_output");
+  Serial.println(last_output);
+  Serial.println("output");
+  Serial.println(output);
   
   sendToDAC(output);
   
