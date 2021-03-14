@@ -21,9 +21,9 @@
 #define MAX_FREQ     129      // Absolute maximum frequency
 #define FREQUENCY    100
 
-#define Kp           1        // Proportional gain
-#define Ki           2        // Integral gain
-#define Kd           1        // Differential gain
+#define Kp           0.1        // Proportional gain
+#define Ki           0.2        // Integral gain
+#define Kd           0.1        // Differential gain
 
 #define BUF_LEN 20
 
@@ -134,6 +134,7 @@ static float apply_PID(float Vin)
   output = proportional_part + integral_part + differential_part;
   if (output >= Vlim_Up)
   {
+	Serial.println("Windup");
     // Set value to absolute max
     integral_part = (Ki * temp_int * (float)(1 / (float)(FREQUENCY)));
     output = proportional_part + integral_part + differential_part;
@@ -142,19 +143,19 @@ static float apply_PID(float Vin)
   //uint8_t dig_output = (uint8_t)(output*256/5);
   //analogWrite(PWM_PIN, dig_output);
   
-  /*
+  
   Serial.println("err");
   Serial.println(err);
   Serial.println("int_err");
   Serial.println(int_err);
   Serial.println("diff_err");
   Serial.println(diff_err);
-  Serial.println("Kd");
-  Serial.println(Kd);
-  Serial.println("FREQUENCY");
-  Serial.println(FREQUENCY);
-  Serial.println("1 / FREQUENCY");
-  Serial.println(1 / FREQUENCY);
+  //Serial.println("Kd");
+  //Serial.println(Kd);
+  //Serial.println("FREQUENCY");
+  //Serial.println(FREQUENCY);
+  //Serial.println("1 / FREQUENCY");
+  //Serial.println(1 / FREQUENCY);
   Serial.println("proportional_part");
   Serial.println(proportional_part);
   Serial.println("integral_part");
@@ -163,7 +164,7 @@ static float apply_PID(float Vin)
   Serial.println(differential_part);
   Serial.println("output");
   Serial.println(output);
-  */
+ 
   
   sendToDAC(output);
   
