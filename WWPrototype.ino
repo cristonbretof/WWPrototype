@@ -561,7 +561,7 @@ void ISR_menuSelect(void) // Ou select
       statePtr = scaleState;
     }
   }
-  else
+  else if(currentState == BENCHMARK_STATE)
   {
     currentState = CONFIG_STATE;
     statePtr = configState;
