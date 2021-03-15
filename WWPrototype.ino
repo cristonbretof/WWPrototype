@@ -246,7 +246,7 @@ void printScaleFirstLine(void)
 
 void printScaleSecondLine(void)
 {
-  lcd.setCursor(1,0);
+  lcd.setCursor(0,1);
   lcd.print(currNumCoins);
   lcd.print(" x ");
   lcd.print(currentType);
@@ -288,7 +288,7 @@ void printMenuConfig(void)
 
 void printStabilitySymbol(void)
 {
-  lcd.setCursor(1,15);
+  lcd.setCursor(15,1);
   lcd.write(byte(3));
 }
 
@@ -299,7 +299,7 @@ void printBenchmarkSteps(void)
     if (currentStep != 0)
     {
       lcd.print("Posez une masse");
-      lcd.setCursor(1,0);
+      lcd.setCursor(0,1);
       lcd.print("de : ");
       lcd.print(currentStep);
       lcd.print("g");
@@ -307,32 +307,32 @@ void printBenchmarkSteps(void)
     else
     {
       lcd.print("Retirez le poids");
-      lcd.setCursor(1,0);
+      lcd.setCursor(0,1);
       lcd.print("de la balance");
     }
 }
 
 void printArrowUp()
 {
-  lcd.setCursor(0,15);
+  lcd.setCursor(15,0);
   lcd.write(byte(1));
 }
 
 void printArrowDown()
 {
-  lcd.setCursor(1,15);
+  lcd.setCursor(15,1);
   lcd.write(byte(0));
 }
 
 void eraseArrowUp()
 {
-  lcd.setCursor(0,15);
+  lcd.setCursor(15,0);
   lcd.write(" ");
 }
 
 void eraseArrowDown()
 {
-  lcd.setCursor(1,15);
+  lcd.setCursor(15,1);
   lcd.write(" ");
 }
 
@@ -453,7 +453,7 @@ static void processState(void)
   {
     sommePentes = sommePentes + tabEtalons[i]/((benchmarkBuffer.pop()*VREF)/ADC_RES);
     /* Petite animation durant l'état de processus */
-    lcd.setCursor(i%2,i);
+    lcd.setCursor(i,i%2);
     lcd.print(byte(2));
   }
   penteMasseCourant = sommePentes/NUM_ETALONS;
