@@ -30,12 +30,12 @@
 #define Ki           0.2        // Integral gain
 #define Kd           0.001        // Differential gain
 
-#define pinRS        7       
-#define pinE         8
-#define pinD4        9
-#define pinD5        10
-#define pinD6        11
-#define pinD7        12
+#define pinRS        2       
+#define pinE         3
+#define pinD4        4
+#define pinD5        5
+#define pinD6        6
+#define pinD7        7
 
 #define NUM_TYPES    7
 #define NUM_UNITS    2
@@ -53,10 +53,10 @@
 
 #define NUM_BUTTONS     4
 
-#define pinBUTTON_UNIT  16   
-#define pinBUTTON_TYPE  15
-#define pinBUTTON_MENU  14
-#define pinBUTTON_TARE  17
+#define pinBUTTON_UNIT  9  
+#define pinBUTTON_TYPE  10
+#define pinBUTTON_MENU  11
+#define pinBUTTON_TARE  12
 
 #define BUF_LEN         20
 #define NUM_ETALONS     11
