@@ -21,7 +21,7 @@
 #define PRESCALER    256      // Prescaler digital value
 #define BOARD_Freq   16000000 // Arduino Mega 2560 board frequency in Hz
 #define MAX_FREQ     129      // Absolute maximum frequency
-#define FREQUENCY    100      // Currently used frequency
+#define FREQUENCY    50      // Currently used frequency
 
 #define MASS_ERROR   0.3
 #define GRAMS_TO_OZ  0.035274
@@ -30,12 +30,12 @@
 #define Ki           0.2        // Integral gain
 #define Kd           0.001        // Differential gain
 
-#define pinRS        2       
-#define pinE         3
-#define pinD4        4
-#define pinD5        5
-#define pinD6        6
-#define pinD7        7
+#define pinRS        24      
+#define pinE         26
+#define pinD4        28
+#define pinD5        30
+#define pinD6        32
+#define pinD7        34
 
 #define NUM_TYPES    7
 #define NUM_UNITS    2
@@ -53,17 +53,17 @@
 
 #define NUM_BUTTONS     4
 
-#define pinBUTTON_UNIT  9  
-#define pinBUTTON_TYPE  10
-#define pinBUTTON_MENU  11
-#define pinBUTTON_TARE  12
+#define pinBUTTON_A  18  
+#define pinBUTTON_B  2
+#define pinBUTTON_MENU  19
+#define pinBUTTON_TARE  3
 
 #define BUF_LEN         20
 #define NUM_ETALONS     11
 #define AVG_SAMPLES     3
 
 #define CONFIG_STATE_TIMEOUT      200  // Temps entre chaque boucle de l'état de configuration (en ms)
-#define SCALE_STATE_TIMEOUT       10  // Temps entre chaque boucle de l'état de pesé (en ms)
+#define SCALE_STATE_TIMEOUT       100  // Temps entre chaque boucle de l'état de pesé (en ms)
 #define BENCHMARK_STATE_TIMEOUT   200  // Temps entre chaque boucle de l'état d'étalonnage (en ms)
 
 typedef enum {
@@ -114,7 +114,7 @@ static state_t currentState = CONFIG_STATE;
 static mode_t selectedMode = MODE_NORMAL;
 
 /* Array of all button pins */
-const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_MENU,pinBUTTON_TYPE,pinBUTTON_UNIT,pinBUTTON_TARE};
+const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_MENU,pinBUTTON_B,pinBUTTON_A,pinBUTTON_TARE};
 
 /* Error values declarations */
 static float int_err = 0;
@@ -195,8 +195,8 @@ void setup() {
 
   /* Initialize all button pins to interrupt */
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menuSelect, FALLING);
-  attachInterrupt(digitalPinToInterrupt(pinBUTTON_TYPE), ISR_buttonA, FALLING);
-  attachInterrupt(digitalPinToInterrupt(pinBUTTON_UNIT), ISR_buttonB, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_B), ISR_buttonB, FALLING);
+  attachInterrupt(digitalPinToInterrupt(pinBUTTON_A), ISR_buttonA, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_TARE), ISR_tare, FALLING);
 
   /* Start the LCD display */
@@ -267,7 +267,7 @@ void printMenuConfig(void)
       eraseArrowDown();
       
       lcd.setCursor(0,0);
-      lcd.print("ÉTALONNAGE");
+      lcd.print("ETALONNAGE");
       break;
   }
 }
@@ -301,13 +301,13 @@ void printBenchmarkSteps(void)
 void printArrowUp()
 {
   lcd.setCursor(15,0);
-  lcd.write(byte(1));
+  lcd.write(byte(0));
 }
 
 void printArrowDown()
 {
   lcd.setCursor(15,1);
-  lcd.write(byte(0));
+  lcd.write(byte(1));
 }
 
 void eraseArrowUp()
@@ -507,18 +507,24 @@ static void processState(void)
 
 static void benchmarkState(void)
 {
+  
+  float Vin = 0;
   printBenchmarkSteps();
-  delay(BENCHMARK_STATE_TIMEOUT);
+  if (!scaleBuffer.isEmpty())
+  {
+    Vin = scaleBuffer.pop();
+    apply_PID(analogRead(pinADC)*(5.0/1024.0)); //Vin, converti en volt
+  }
 }
 
 static void scaleState(void)
 {
   float Vin = 0;
-  float output;
+  
   if (!scaleBuffer.isEmpty())
   {
     Vin = scaleBuffer.pop();
-    output = apply_PID(analogRead(pinADC)*(5.0/1024.0)); //Vin, converti en volt
+    apply_PID(analogRead(pinADC)*(5.0/1024.0)); //Vin, converti en volt
     if (selectedMode == MODE_MOYENNAGE)
     {
       if (avgBuffer.isFull())
@@ -561,6 +567,7 @@ ISR(TIMER1_COMPA_vect)
 
 void ISR_menuSelect(void) // Ou select
 {
+  Serial.println("menu");
   if(currentState == SCALE_STATE)
   {
     currentState = CONFIG_STATE;
@@ -575,6 +582,7 @@ void ISR_menuSelect(void) // Ou select
     }
     else
     {
+      
       currentState = SCALE_STATE;
       statePtr = scaleState;
     }
@@ -586,7 +594,33 @@ void ISR_menuSelect(void) // Ou select
   }
 }
 
-void ISR_buttonA(void) // Ou down
+void ISR_buttonA(void) // Ou up
+{
+  if(currentState == SCALE_STATE)
+  {
+    unit_index++;
+    currentUnit = unitArray[unit_index];
+    if (unit_index == NUM_UNITS-1)
+    {
+      unit_index = 0;
+    }
+  }
+  else if(currentState == CONFIG_STATE)
+  {
+    if (selectedMode == MODE_MOYENNAGE)
+    {
+      Serial.println("here");
+      selectedMode = MODE_NORMAL;
+    }
+    else if (selectedMode == MODE_ETALONNAGE)
+    {
+      selectedMode = MODE_MOYENNAGE;
+    }
+  }
+}
+
+void ISR_buttonB(void) // Ou down
+
 {
   if(currentState == SCALE_STATE)
   {
@@ -606,30 +640,6 @@ void ISR_buttonA(void) // Ou down
     else if (selectedMode == MODE_MOYENNAGE)
     {
       selectedMode = MODE_ETALONNAGE;
-    }
-  }
-}
-
-void ISR_buttonB(void) // Ou up
-{
-  if(currentState == SCALE_STATE)
-  {
-    unit_index++;
-    currentUnit = unitArray[unit_index];
-    if (unit_index == NUM_UNITS-1)
-    {
-      unit_index = 0;
-    }
-  }
-  else if(currentState == CONFIG_STATE)
-  {
-    if (selectedMode == MODE_MOYENNAGE)
-    {
-      selectedMode = MODE_NORMAL;
-    }
-    else if (selectedMode == MODE_ETALONNAGE)
-    {
-      selectedMode = MODE_MOYENNAGE;
     }
   }
 }
