@@ -276,6 +276,12 @@ void printStabilitySymbol(void)
   lcd.write(byte(3));
 }
 
+void eraseStabilitySymbol(void)
+{
+  lcd.setCursor(15,1);
+  lcd.write(" ");
+}
+
 void printBenchmarkSteps(void)
 {
     lcd.clear();   
@@ -514,6 +520,10 @@ static void scaleState(void)
   {
     printStabilitySymbol();
   }
+  else
+  {
+    eraseStabilitySymbol();
+  }
   printScaleFirstLine();
   printScaleSecondLine();
 }
@@ -531,15 +541,14 @@ static void scaleState(void)
 */
 ISR(TIMER1_COMPA_vect)
 {
-  unsigned short val = 0;
+  uint16_t val = 0;
 
   val = analogRead(pinADC);
-  scaleBuffer.push((float)(val)*VREF/ADC_RES);
+  scaleBuffer.push((float)((val)*VREF/ADC_RES));
 }
 
 void ISR_menuSelect(void) // Ou select
 {
-  Serial.println("menu");
   if(currentState == SCALE_STATE)
   {
     currentState = CONFIG_STATE;
@@ -581,7 +590,6 @@ void ISR_buttonA(void) // Ou up
   {
     if (selectedMode == MODE_MOYENNAGE)
     {
-      Serial.println("here");
       selectedMode = MODE_NORMAL;
     }
     else if (selectedMode == MODE_ETALONNAGE)
