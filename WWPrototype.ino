@@ -20,8 +20,8 @@
 
 #define PRESCALER    256      // Prescaler digital value
 #define BOARD_Freq   16000000 // Arduino Mega 2560 board frequency in Hz
-#define MAX_FREQ     129      // Absolute maximum frequency
-#define FREQUENCY    50      // Currently used frequency
+#define MAX_FREQ     129      // Absolute maximum frequency with minimal LCD use
+#define FREQUENCY    10      // Currently used frequency
 
 #define MASS_ERROR   0.3
 #define GRAMS_TO_OZ  0.035274
@@ -353,8 +353,8 @@ static float apply_PID(float Vin){
   output = proportional_part + integral_part + differential_part;
   if (output >= Vlim_Up || output <= -Vlim_Up)
   {
-	Serial.println("Windup");
-	int_err = temp_int; //Remet l'ancienne int_erre
+  	Serial.println("Windup");
+  	int_err = temp_int; //Remet l'ancienne int_erre
     // Set value to absolute max
     integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
     output = proportional_part + integral_part + differential_part;
@@ -365,17 +365,18 @@ static float apply_PID(float Vin){
   //Le if, else if qui suit offre une protection pour de pas avoir des valeurs trop haute ou trop base. Important de la laisser car il arrive que la première erreur donne une erreur complètement erroné et que le PID diverge.  
   if (output < OUTPUT_MIN) // Vérifie que output respecte ça valeur min
   {
-	output = OUTPUT_MIN;
+	  output = OUTPUT_MIN;
   }
   else if (output > OUTPUT_MAX) // Vérifie que output respecte ça valeur max
   {
-	output = OUTPUT_MAX;
+	  output = OUTPUT_MAX;
   }  
   sendToDAC(output);
   return output;
 }
 
-void setupTimer() {
+void setupTimer()
+{
   /* Disable interrupts */
   noInterrupts();
 
