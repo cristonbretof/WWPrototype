@@ -62,10 +62,6 @@
 #define NUM_ETALONS     11
 #define AVG_SAMPLES     3
 
-#define CONFIG_STATE_TIMEOUT      200  // Temps entre chaque boucle de l'état de configuration (en ms)
-#define SCALE_STATE_TIMEOUT       100  // Temps entre chaque boucle de l'état de pesé (en ms)
-#define BENCHMARK_STATE_TIMEOUT   200  // Temps entre chaque boucle de l'état d'étalonnage (en ms)
-
 typedef enum {
   CONFIG_STATE = 0,
   SCALE_STATE = 1,
@@ -480,7 +476,6 @@ void sendToDAC(float outputDAC){
 static void configState(void)
 {
   printMenuConfig();
-  delay(CONFIG_STATE_TIMEOUT);
 }
 
 static void processState(void)
@@ -507,7 +502,6 @@ static void processState(void)
 
 static void benchmarkState(void)
 {
-  
   float Vin = 0;
   printBenchmarkSteps();
   if (!scaleBuffer.isEmpty())
@@ -542,7 +536,6 @@ static void scaleState(void)
     printStabilitySymbol();
   }
   printScaleFirstLine();
-  delay(SCALE_STATE_TIMEOUT);
   printScaleSecondLine();
 }
 
