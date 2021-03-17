@@ -359,36 +359,8 @@ static float apply_PID(float Vin){
     integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
     output = proportional_part + integral_part + differential_part;
   }
-
-/*Serial.println("nouvelle boucle");
-  Serial.println("err");
-  Serial.println(err);
-  Serial.println("int_err");
-  Serial.println(int_err);
-  Serial.println("diff_err");
-  Serial.println(diff_err);
-  //Serial.println("Kd");
-  //Serial.println(Kd);
-  //Serial.println("FREQUENCY");
-  //Serial.println(FREQUENCY);
-  //Serial.println("1 / FREQUENCY");
-  //Serial.println(1 / FREQUENCY);
-  Serial.println("proportional_part");
-  Serial.println(proportional_part);
-  Serial.println("integral_part");
-  Serial.println(integral_part);
-  Serial.println("differential_part");
-  Serial.println(differential_part);
-  Serial.println("output");
-  Serial.println(output);*/
- 
  
   output = last_output - output; //Corrige la dernière tension appliquée.
-  
-  /*Serial.println("last_output");
-  Serial.println(last_output);
-  Serial.println("output");
-  Serial.println(output);*/
   
   //Le if, else if qui suit offre une protection pour de pas avoir des valeurs trop haute ou trop base. Important de la laisser car il arrive que la première erreur donne une erreur complètement erroné et que le PID diverge.  
   if (output < OUTPUT_MIN) // Vérifie que output respecte ça valeur min
