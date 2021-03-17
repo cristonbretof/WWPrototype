@@ -456,6 +456,9 @@ static void processState(void)
 {
   float sommePentes = 0;
   lcd.clear();
+
+  /* Désactivation des interruptions */
+  noInterrupts();
   
   /* Calcul de la pente pour le calcul de la masse */
   for(int i = 0; i < NUM_ETALONS; i++)                         // Moyenne des coefficients
@@ -464,10 +467,12 @@ static void processState(void)
     /* Petite animation durant l'état de processus */
     lcd.setCursor(i,i%2);
     lcd.print(byte(2));
+    delay(500);
   }
   penteMasseCourant = sommePentes/NUM_ETALONS;
 
-  /* Affichage particulier suivant le calcul de la pente... */
+  /* Réactivation des interruptions */
+  interrupts();
 
   /* Retour à l'état de configuration */
   currentState = CONFIG_STATE;
@@ -481,7 +486,7 @@ static void benchmarkState(void)
   if (!scaleBuffer.isEmpty())
   {
     Vin = scaleBuffer.pop();
-    apply_PID(analogRead(pinADC)*(5.0/1024.0)); //Vin, converti en volt
+    apply_PID(Vin); //Vin, converti en volt
   }
 }
 
@@ -492,7 +497,7 @@ static void scaleState(void)
   if (!scaleBuffer.isEmpty())
   {
     Vin = scaleBuffer.pop();
-    apply_PID(analogRead(pinADC)*(5.0/1024.0)); //Vin, converti en volt
+    apply_PID(Vin); //Vin, converti en volt
     if (selectedMode == MODE_MOYENNAGE)
     {
       if (avgBuffer.isFull())
