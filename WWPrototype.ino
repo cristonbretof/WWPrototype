@@ -289,13 +289,19 @@ void printBenchmarkSteps(void)
 {
     lcd.clear();   
     lcd.setCursor(0,0);
-    if (currentStep != 0)
+    if (currentStep > 0 && !benchmarkBuffer.isFull())
     {
       lcd.print("Posez une masse");
       lcd.setCursor(0,1);
       lcd.print("de : ");
       lcd.print(currentStep);
       lcd.print("g");
+    }
+    else if (currentStep == 0)
+    {
+      lcd.print("Retirez le poids");
+      lcd.setCursor(0,1);
+      lcd.print("de la balance");
     }
     else
     {
@@ -408,14 +414,12 @@ void setupTimer()
 
 void incrementBenchmark(uint16_t val)
 {
-  currentStep = tabEtalons[step_index];
-  benchmarkBuffer.push(val);
-  if (benchmarkBuffer.isFull())
-  {
-    currentState = PROCESS_STATE;
-    statePtr = processState;
+  if (!benchmarkBuffer.isFull())
+  {    
+    currentStep = tabEtalons[step_index];
+    benchmarkBuffer.push(val);
+    step_index++;
   }
-  step_index++;
 }
 
 void calculateAvgMass(void)
@@ -468,6 +472,9 @@ static void processState(void)
 
   /* Désactivation des interruptions */
   noInterrupts();
+
+  /* Remise zéro de l'indice d'étape */
+  step_index = 0;
   
   lcd.clear();
   
@@ -491,6 +498,9 @@ static void processState(void)
   }
   penteMasseCourant = sommePentes/NUM_ETALONS;
   ordMasseCourant = tabEtalons[5] - penteMasseCourant*xCurrentForIntercept;
+
+  /* Réétablir la tare */
+  massTare = currMass;
 
   /* Réactivation des interruptions */
   interrupts();
@@ -652,7 +662,15 @@ void ISR_tare(void)
   }
   else if (currentState == BENCHMARK_STATE)
   {
-    uint16_t val = analogRead(pinCURRENT);
-    incrementBenchmark(val);
+    if (benchmarkBuffer.isFull())
+    {
+      currentState = PROCESS_STATE;
+      statePtr = processState;
+    }
+    else
+    {
+      uint16_t val = analogRead(pinCURRENT);
+      incrementBenchmark(val); 
+    }
   }
 }
