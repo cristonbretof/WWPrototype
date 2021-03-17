@@ -491,6 +491,9 @@ static void benchmarkState(void)
   printBenchmarkSteps();
   if (!scaleBuffer.isEmpty())
   {
+    /* Debug de la fréquence en se référant à la taille du buffer (nb d'élément dans le buffer à cet instant) */
+    Serial.println(scaleBuffer.size()); // On veut la valeur de 1, pas de 20, sur le moniteur
+    
     Vin = scaleBuffer.pop();
     apply_PID(Vin); //Vin, converti en volt
   }
@@ -502,6 +505,9 @@ static void scaleState(void)
   
   if (!scaleBuffer.isEmpty())
   {
+    /* Debug de la fréquence en se référant à la taille du buffer (nb d'élément dans le buffer à cet instant) */
+    Serial.println(scaleBuffer.size()); // On veut la valeur de 1, pas de 20, sur le moniteur
+    
     Vin = scaleBuffer.pop();
     apply_PID(Vin); //Vin, converti en volt
     if (selectedMode == MODE_MOYENNAGE)
@@ -600,7 +606,6 @@ void ISR_buttonA(void) // Ou up
 }
 
 void ISR_buttonB(void) // Ou down
-
 {
   if(currentState == SCALE_STATE)
   {
