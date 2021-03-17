@@ -5,56 +5,58 @@
 
 #include <Wire.h> //Library for DAC
 
-#define LED_PIN      13       // GPIO pin (on-board LED)
+#define LED_PIN       13       // GPIO pin (on-board LED)
 
-#define V0           2.5      // Voltage refering to home position of platform
-#define Vlim_Up      2        // Maximum allowed voltage to provide to amplifier
+#define V0            2.5      // Voltage refering to home position of platform
+#define Vlim_Up       2        // Maximum allowed voltage to provide to amplifier
 
+#define pinADC        A15      // Analog pin to read position input
+#define ADC_RES       1023     // Maximum resolution of analog to digital converter
+#define VREF          5        // ADC reference voltage
 
-#define pinADC       A15       // Analog pin to read position input
-#define ADC_RES      1023     // Maximum resolution of analog to digital converter
-#define VREF         5        // ADC reference voltage
+#define pinCURRENT    A14      // 
+#define PWM_PIN       12       // PWM pin to control amplifier (basic PWM)
 
-#define pinCURRENT   A14       // 
-#define PWM_PIN      12        // PWM pin to control amplifier (basic PWM)
+#define PRESCALER     256      // Prescaler digital value
+#define BOARD_Freq    16000000 // Arduino Mega 2560 board frequency in Hz
+#define MAX_FREQ      129      // Absolute maximum frequency with minimal LCD use
+#define FREQUENCY     10       // Currently used frequency
 
-#define PRESCALER    256      // Prescaler digital value
-#define BOARD_Freq   16000000 // Arduino Mega 2560 board frequency in Hz
-#define MAX_FREQ     129      // Absolute maximum frequency with minimal LCD use
-#define FREQUENCY    10      // Currently used frequency
+#define ENABLE_TIMER  TIMSK1 | (1 << OCIE1A)
+#define DISABLE_TIMER TIMSK1 | (0 << OCIE1A)
 
-#define MASS_ERROR   0.3
-#define GRAMS_TO_OZ  0.035274
+#define MASS_ERROR    0.3
+#define GRAMS_TO_OZ   0.035274
 
-#define Kp           0.01        // Proportional gain
-#define Ki           0.2        // Integral gain
-#define Kd           0.001        // Differential gain
+#define Kp            0.01     // Proportional gain
+#define Ki            0.2      // Integral gain
+#define Kd            0.001    // Differential gain
 
-#define pinRS        24      
-#define pinE         26
-#define pinD4        28
-#define pinD5        30
-#define pinD6        32
-#define pinD7        34
+#define pinRS         24      
+#define pinE          26
+#define pinD4         28
+#define pinD5         30
+#define pinD6         32
+#define pinD7         34
 
-#define NUM_TYPES    7
-#define NUM_UNITS    2
+#define NUM_TYPES     7
+#define NUM_UNITS     2
 
-#define DAC_RES      4096     // Maximum resolution of digital to analog converter
-#define DAC_VREF     5        // DAC reference voltage
-#define OUTPUT_MAX   2        // Offre une protection sur la valeur appliquer au DAC.
-#define OUTPUT_MIN   0        // Offre une protection sur la valeur appliquer au DAC.
+#define DAC_RES       4096     // Maximum resolution of digital to analog converter
+#define DAC_VREF      5        // DAC reference voltage
+#define OUTPUT_MAX    2        // Offre une protection sur la valeur appliquer au DAC.
+#define OUTPUT_MIN    0        // Offre une protection sur la valeur appliquer au DAC.
 
 //This is the I2C Address of the MCP4725, by default (A0 pulled to GND).
 //Please note that this breakout is for the MCP4725A0. 
-#define MCP4725_ADDR 0x60   
+#define MCP4725_ADDR  0x60   
 //For devices with A0 pulled HIGH, use 0x61
 
 
 #define NUM_BUTTONS     4
 
-#define pinBUTTON_A  18  
-#define pinBUTTON_B  2
+#define pinBUTTON_A     18  
+#define pinBUTTON_B     2
 #define pinBUTTON_MENU  19
 #define pinBUTTON_TARE  3
 
@@ -386,7 +388,6 @@ void setupTimer()
 
   /* Set compare register for desired frequency */
   OCR1A = (int)(BOARD_Freq/PRESCALER/FREQUENCY-1);
-  Serial.println(OCR1A);
 
   TCCR1B |= (1 << WGM12);  // Turn on CTC mode
   TCCR1B |= (1 << CS12);   // Set prescaler to 8
@@ -459,7 +460,7 @@ static void processState(void)
   /* Calcul de la pente pour le calcul de la masse */
   for(int i = 0; i < NUM_ETALONS; i++)                         // Moyenne des coefficients
   {
-    sommePentes = sommePentes + tabEtalons[i]/((benchmarkBuffer.pop()*VREF)/ADC_RES);
+    sommePentes += tabEtalons[i]/((benchmarkBuffer.pop()*VREF)/ADC_RES);
     /* Petite animation durant l'état de processus */
     lcd.setCursor(i,i%2);
     lcd.print(byte(2));
