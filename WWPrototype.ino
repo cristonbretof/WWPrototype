@@ -64,6 +64,8 @@
 #define NUM_ETALONS     11
 #define AVG_SAMPLES     3
 
+#define INTERCEPT_CALCULATION_INDEX 5
+
 typedef enum {
   CONFIG_STATE = 0,
   SCALE_STATE = 1,
@@ -89,7 +91,8 @@ uint8_t unit_index = 0;
 uint8_t type_index = 0;
 
 /* Initial slope for current to mass conversion */
-float penteMasseCourant = 1; 
+float penteMasseCourant = 1;
+float ordMasseCourant = 0;
 uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 
 /* Main data configurations */
@@ -423,7 +426,7 @@ void calculateAvgMass(void)
     sum += avgBuffer.pop();
   }
   
-  currMass = (float)(penteMasseCourant*(sum/AVG_SAMPLES));
+  currMass = (float)(penteMasseCourant*(sum/AVG_SAMPLES) + ordMasseCourant);
   if (currentUnit == "oz")
   {
     currMass *= GRAMS_TO_OZ;
@@ -461,21 +464,33 @@ static void configState(void)
 static void processState(void)
 {
   float sommePentes = 0;
-  lcd.clear();
+  float xCurrentForIntercept = 0;
 
   /* Désactivation des interruptions */
   noInterrupts();
   
+  lcd.clear();
+  
   /* Calcul de la pente pour le calcul de la masse */
   for(int i = 0; i < NUM_ETALONS; i++)                         // Moyenne des coefficients
   {
-    sommePentes += tabEtalons[i]/((benchmarkBuffer.pop()*VREF)/ADC_RES);
+    if (i == INTERCEPT_CALCULATION_INDEX - 1)
+    {
+      xCurrentForIntercept = (benchmarkBuffer.pop()*VREF)/ADC_RES;
+      sommePentes += tabEtalons[i]/xCurrentForIntercept;
+    }
+    else
+    {
+      sommePentes += tabEtalons[i]/((benchmarkBuffer.pop()*VREF)/ADC_RES);
+    }
+    
     /* Petite animation durant l'état de processus */
     lcd.setCursor(i,i%2);
     lcd.print(byte(2));
     delay(500);
   }
   penteMasseCourant = sommePentes/NUM_ETALONS;
+  ordMasseCourant = tabEtalons[5] - penteMasseCourant*xCurrentForIntercept;
 
   /* Réactivation des interruptions */
   interrupts();
