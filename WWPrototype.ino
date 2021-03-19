@@ -214,6 +214,7 @@ void setup()
 
   /* Start CAD */
   Wire.begin();
+  sendToDAC(0.0); //Reset la valeur du CAD
 }
 
 void loop()
