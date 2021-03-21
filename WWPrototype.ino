@@ -89,8 +89,8 @@ typedef enum
 } mode_t;
 
 /* Symbol arrays */
-String typeArray[NUM_TYPES] = {"1c", "5c", "10c", "25c", "1$", "2$", "0"};
-String unitArray[NUM_UNITS] = {"oz", "g"};
+String typeArray[NUM_TYPES] = {"1c ", "5c ", "10c", "25c", "1$ ", "2$ ", "0  "};
+String unitArray[NUM_UNITS] = {"oz", "g "};
 
 float massTypeGram[NUM_TYPES] = {2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92};
 float massTypeOunce[NUM_TYPES] = {0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958};
