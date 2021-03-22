@@ -81,7 +81,7 @@
 #define BUF_LEN     20 // Taille du buffer d'échantillons
 #define AVG_SAMPLES 3  // Nombre d'écahntillons pour faire la moyenne
 
-#define NUM_LCD_PRINTS 5
+#define NUM_LCD_PRINTS 10
 
 
 ///////////////////////////////
@@ -109,7 +109,8 @@ typedef enum
 String typeArray[NUM_TYPES] = {"1c ", "5c ", "10c", "25c", "1$ ", "2$ ", "0  "};
 String unitArray[NUM_UNITS] = {"oz   ", "g   "};
 uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
-uint8_t tabCourantEtalons[NUM_ETALONS] = {0.335, 0.49, 0.645, 0.81, 0.95, 1.1, 1.25, 1.4, 1.545, 1.695, 1.86};
+//uint8_t tabCourantEtalons[NUM_ETALONS] = {0.335, 0.49, 0.645, 0.81, 0.95, 1.1, 1.25, 1.4, 1.545, 1.695, 1.86};
+uint8_t tabCourantEtalons[NUM_ETALONS];
 
 /* Masses des pièces de monnaie canadienne */
 float massTypeGram[NUM_TYPES] = {2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92};
@@ -124,7 +125,7 @@ uint8_t type_index = 0;
 
 /* Pente et ordonnée de la calibration masse/courant */
 float penteMasseCourant = 65.16;
-float ordMasseCourant = tabCourantEtalons[0];
+float ordMasseCourant = -22.649;
 
 /* Variables référant à la masse */
 float massTare = 0;
