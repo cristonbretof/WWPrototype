@@ -13,8 +13,8 @@
 #define Vlim_Up        2                      // Limite maximale permise pour la monté de tension (provenant de l'erreur)
 
 #define pinADC         A15                    // Pin utilisé pour l'ADC servant à l'échantillonnage de tension
-#define ADC_RES        1023                   // Résolution (en bit) de l'ADC utilisé
-#define VREF           5                      // Tension de référence de l'ADC
+#define ADC_RES        (float)1023            // Résolution (en bit) de l'ADC utilisé
+#define VREF           (float)5               // Tension de référence de l'ADC
 
 #define pinMASSVOLTAGE A14                    // Pin utilisé pour la lecture du courant
 //#define PWM_PIN 12                         // PWM pin to control amplifier (basic PWM) // On peut enlever cette ligne là
@@ -23,7 +23,7 @@
 #define BOARD_Freq     16000000               // Arduino Mega 2560 board frequency in Hz
 
 #define MAX_FREQ       145                    // Absolute maximum frequency with minimal LCD use
-#define FREQUENCY      145                    // Currently used frequency
+#define FREQUENCY      80                    // Currently used frequency
 
 #define ENABLE_TIMER   TIMSK1 | (1 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à ON
 #define DISABLE_TIMER  TIMSK1 | (0 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à OFF
@@ -79,9 +79,9 @@
 
 /* Paramètres d'échantillonnage (mode normal et moyennage) */
 #define BUF_LEN     20 // Taille du buffer d'échantillons
-#define AVG_SAMPLES 3  // Nombre d'écahntillons pour faire la moyenne
+#define AVG_SAMPLES 20  // Nombre d'écahntillons pour faire la moyenne
 
-#define NUM_LCD_PRINTS 30
+#define NUM_LCD_PRINTS 1
 
 
 ///////////////////////////////
@@ -261,7 +261,6 @@ void printScaleFirstLine(void)
     lcd.print("MASSE: ");
     lcd.print((float)(currMass - massTare), 2);
     lcd.print(currentUnit);
-    Serial.println((float)(currMass - massTare));
     numPrintFirst = 0;
   }
   else
@@ -395,12 +394,12 @@ void eraseArrowDown()
 */
 static float apply_PID(float Vin)
 {
-  delay(10);
+  delay(20);
   float output;
+  float errTotal;
 
   // Calculate positionning error
   float err = V0 - Vin;
-  //Serial.println(err);
 
   // Record previous integral error to allow reset in case of windup
   float temp_int = int_err;
@@ -417,23 +416,18 @@ static float apply_PID(float Vin)
   float integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
   float differential_part = (Kd * diff_err / (float)(1 / (float)(FREQUENCY)));
 
-  output = proportional_part + integral_part + differential_part;
-  if (output >= Vlim_Up || output <= -Vlim_Up)
+  errTotal = proportional_part + integral_part + differential_part;
+  if (errTotal >= Vlim_Up || errTotal <= -Vlim_Up)
   {
-//    Serial.println("Windup");
+    Serial.println("Windup");
     int_err = temp_int; //Remet l'ancienne int_erre
     // Set value to absolute max
     integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
-    output = proportional_part + integral_part + differential_part;
+    errTotal = proportional_part + integral_part + differential_part;
   }
 
-  output = last_output - output; //Corrige la dernière tension appliquée.
+  output = last_output - errTotal; //Corrige la dernière tension appliquée.
 
-  if (abs(output) < (5 / ADC_RES))
-  {
-//    Serial.println("haha");
-    return 0.0;
-  }
   //Le if, else if qui suit offre une protection pour de pas avoir des valeurs trop haute ou trop base. Important de la laisser car il arrive que la première erreur donne une erreur complètement erroné et que le PID diverge.
   if (output < OUTPUT_MIN) // Vérifie que output respecte ça valeur min
   {
@@ -598,11 +592,12 @@ static void benchmarkState(void)
 static void scaleState(void)
 {
   float Vin = 0;
+  //Serial.println("ScaleState");
 
   if (!scaleBuffer.isEmpty())
   {
     /* Debug de la fréquence en se référant à la taille du buffer (nb d'élément dans le buffer à cet instant) */
-    // Serial.println(scaleBuffer.size()); // On veut la valeur de 1, pas de 20, sur le moniteur
+    //Serial.println(scaleBuffer.size()); // On veut la valeur de 1, pas de 20, sur le moniteur
 
     Vin = scaleBuffer.pop();
     apply_PID(Vin); //Vin, converti en volt
@@ -619,7 +614,7 @@ static void scaleState(void)
     }
   }
   
-  currMass = (float)(penteMasseCourant * (float)((analogRead(pinMASSVOLTAGE)*VREF)/ADC_RES) + ordMasseCourant);
+  currMass = (float)(penteMasseCourant * (float)analogRead(pinMASSVOLTAGE)*(float)(VREF/ADC_RES) + ordMasseCourant);
   if (abs(currMass - prevMass) < MASS_ERROR)
   {
     printStabilitySymbol();
@@ -630,6 +625,7 @@ static void scaleState(void)
   }
   printScaleFirstLine();
   printScaleSecondLine();
+
 }
 
 /////////////////////
@@ -647,6 +643,7 @@ ISR(TIMER1_COMPA_vect)
 {
   uint16_t val = 0;
 
+  //Serial.println("timer");
   val = analogRead(pinADC);
   scaleBuffer.push((float)((val)*VREF / ADC_RES));
 }
@@ -655,13 +652,14 @@ void ISR_menuSelect(void) // Ou select
 {
   if (currentState == SCALE_STATE)
   {
-    deinitTimer();
     currentState = CONFIG_STATE;
     statePtr = configState;
+    deinitTimer();
   }
   else if (currentState == CONFIG_STATE)
   {
     setupTimer();
+    massTare = currMass;
     if (selectedMode == MODE_ETALONNAGE)
     {
       currentState = BENCHMARK_STATE;
@@ -675,9 +673,9 @@ void ISR_menuSelect(void) // Ou select
   }
   else if (currentState == BENCHMARK_STATE)
   {
-    deinitTimer();
     currentState = CONFIG_STATE;
     statePtr = configState;
+    deinitTimer();
   }
 }
 
