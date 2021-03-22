@@ -16,7 +16,7 @@
 #define ADC_RES       1023                   // Résolution (en bit) de l'ADC utilisé
 #define VREF          5                      // Tension de référence de l'ADC
 
-#define pinCURRENT    A14                    // Pin utilisé pour la lecture du courant
+#define pinMASSVOLTAGE    A14                    // Pin utilisé pour la lecture du courant
 //#define PWM_PIN 12                         // PWM pin to control amplifier (basic PWM) // On peut enlever cette ligne là
 
 #define PRESCALER     256                    // Prescaler digital value
@@ -111,6 +111,7 @@ typedef enum
 String typeArray[NUM_TYPES] = {"1c ", "5c ", "10c", "25c", "1$ ", "2$ ", "0  "};
 String unitArray[NUM_UNITS] = {"oz", "g"};
 uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+uint8_t tabCourantEtalons[NUM_ETALONS] = {0.335, 0.49, 0.645, 0.81, 0.95, 1.1, 1.25, 1.4, 1.545, 1.695, 1.86};
 
 /* Masses des pièces de monnaie canadienne */
 float massTypeGram[NUM_TYPES] = {2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92};
@@ -254,7 +255,7 @@ void printScaleFirstLine(void)
 {
   lcd.setCursor(0, 0);
   lcd.print("MASSE: ");
-  lcd.print(currMass, 2);
+  lcd.print(currMass - massTare, 2);
   lcd.print(" ");
   lcd.print(currentUnit);
 }
@@ -493,7 +494,7 @@ void calculateAvgMass(void)
 
 void calculateNumCoins(void)
 {
-  currNumCoins = floor(currMass / massTypeGram[type_index]);
+  currNumCoins = (uint8_t)floor(currMass / massTypeGram[type_index]);
 }
 
 void sendToDAC(float outputDAC)
@@ -523,6 +524,7 @@ static void configState(void)
 
 static void processState(void)
 {
+  uint16_t v_in = 0;
   float sommePentes = 0;
   float xCurrentForIntercept = 0;
 
@@ -537,15 +539,9 @@ static void processState(void)
   /* Calcul de la pente pour le calcul de la masse */
   for (int i = 0; i < NUM_ETALONS; i++) // Moyenne des coefficients
   {
-    if (i == INTERCEPT_CALCULATION_INDEX - 1)
-    {
-      xCurrentForIntercept = (benchmarkBuffer.pop() * VREF) / ADC_RES;
-      sommePentes += tabEtalons[i] / xCurrentForIntercept;
-    }
-    else
-    {
-      sommePentes += tabEtalons[i] / ((benchmarkBuffer.pop() * VREF) / ADC_RES);
-    }
+    v_in = benchmarkBuffer.pop();
+    sommePentes += (float)(tabEtalons[i] / ((v_in * VREF) / ADC_RES));
+    tabCourantEtalons[i] = v_in;
 
     /* Petite animation durant l'état de processus */
     lcd.setCursor(i, i % 2);
@@ -553,7 +549,9 @@ static void processState(void)
     delay(500);
   }
   penteMasseCourant = sommePentes / NUM_ETALONS;
-  ordMasseCourant = tabEtalons[5] - penteMasseCourant * xCurrentForIntercept;
+  ordMasseCourant = tabCourantEtalons[0];
+
+  currMass = (float)(penteMasseCourant * analogRead(pinMASSVOLTAGE) + ordMasseCourant);
 
   /* Réétablir la tare */
   massTare = currMass;
@@ -599,10 +597,12 @@ static void scaleState(void)
       }
       else
       {
-        avgBuffer.push(analogRead(pinCURRENT));
+        avgBuffer.push(analogRead(pinMASSVOLTAGE));
       }
     }
   }
+  
+  currMass = (float)(penteMasseCourant * analogRead(pinMASSVOLTAGE) + ordMasseCourant);
   if (abs(currMass - prevMass) < MASS_ERROR)
   {
     printStabilitySymbol();
@@ -727,7 +727,7 @@ void ISR_tare(void)
     }
     else
     {
-      uint16_t val = analogRead(pinCURRENT);
+      uint16_t val = analogRead(pinMASSVOLTAGE);
       incrementBenchmark(val);
     }
   }
