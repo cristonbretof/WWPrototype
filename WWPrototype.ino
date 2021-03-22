@@ -109,7 +109,7 @@ typedef enum
 
 /* Tableaux 1D représentant respectivement les types, les unités et les étalons supportés */
 String typeArray[NUM_TYPES] = {"1c ", "5c ", "10c", "25c", "1$ ", "2$ ", "0  "};
-String unitArray[NUM_UNITS] = {"oz", "g"};
+String unitArray[NUM_UNITS] = {"oz   ", "g   "};
 uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 uint8_t tabCourantEtalons[NUM_ETALONS] = {0.335, 0.49, 0.645, 0.81, 0.95, 1.1, 1.25, 1.4, 1.545, 1.695, 1.86};
 
@@ -135,8 +135,8 @@ float prevMass = 0;
 uint8_t currNumCoins = 0;
 
 /* Unité et type actifs sur l'affichage */
-String currentUnit;
-String currentType;
+String currentUnit = unitArray[1];
+String currentType = typeArray[0];
 
 /* État actuel de l'étalonnage */
 uint16_t currentStep = 0;
@@ -255,15 +255,15 @@ void printScaleFirstLine(void)
 {
   lcd.setCursor(0, 0);
   lcd.print("MASSE: ");
-  lcd.print(currMass - massTare, 2);
-  lcd.print(" ");
+  lcd.print((float)(currMass - massTare), 2);
   lcd.print(currentUnit);
+  Serial.println((float)(currMass - massTare));
 }
 
 void printScaleSecondLine(void)
 {
   lcd.setCursor(0, 1);
-  lcd.print(currNumCoins);
+  lcd.print(calculateNumCoins());
   lcd.print(" x ");
   lcd.print(currentType);
 }
@@ -382,7 +382,7 @@ static float apply_PID(float Vin)
 
   // Calculate positionning error
   float err = V0 - Vin;
-  Serial.println(err);
+  //Serial.println(err);
 
   // Record previous integral error to allow reset in case of windup
   float temp_int = int_err;
@@ -492,9 +492,9 @@ void calculateAvgMass(void)
   }
 }
 
-void calculateNumCoins(void)
+uint8_t calculateNumCoins(void)
 {
-  currNumCoins = (uint8_t)floor(currMass / massTypeGram[type_index]);
+  return (uint8_t)floor(currMass / massTypeGram[type_index]);
 }
 
 void sendToDAC(float outputDAC)
