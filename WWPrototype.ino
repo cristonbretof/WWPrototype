@@ -502,7 +502,7 @@ void calculateAvgMass(void)
     sum += avgBuffer.pop();
   }
 
-  currMass = (float)(penteMasseCourant * (float)(sum / AVG_SAMPLES) + ordMasseCourant);
+  currMass = (float)(penteMasseCourant * (float)(((float)(sum / AVG_SAMPLES)*VREF)/ADC_RES) + ordMasseCourant);
   if (currentUnit == "oz")
   {
     currMass *= GRAMS_TO_OZ;
@@ -568,7 +568,7 @@ static void processState(void)
   penteMasseCourant = sommePentes / NUM_ETALONS;
   ordMasseCourant = tabCourantEtalons[0];
 
-  currMass = (float)(penteMasseCourant*(float)analogRead(pinMASSVOLTAGE)+(float)ordMasseCourant);
+  currMass = (float)(penteMasseCourant*(float)((analogRead(pinMASSVOLTAGE)*VREF)/ADC_RES)+(float)ordMasseCourant);
 
   /* Réétablir la tare */
   massTare = currMass;
@@ -619,7 +619,7 @@ static void scaleState(void)
     }
   }
   
-  currMass = (float)(penteMasseCourant * analogRead(pinMASSVOLTAGE) + ordMasseCourant);
+  currMass = (float)(penteMasseCourant * (float)((analogRead(pinMASSVOLTAGE)*VREF)/ADC_RES) + ordMasseCourant);
   if (abs(currMass - prevMass) < MASS_ERROR)
   {
     printStabilitySymbol();
