@@ -81,7 +81,7 @@
 #define BUF_LEN     20 // Taille du buffer d'échantillons
 #define AVG_SAMPLES 3  // Nombre d'écahntillons pour faire la moyenne
 
-#define NUM_LCD_PRINTS 10
+#define NUM_LCD_PRINTS 30
 
 
 ///////////////////////////////
