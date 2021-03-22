@@ -429,6 +429,20 @@ static float apply_PID(float Vin)
   return output;
 }
 
+void deinitTimer()
+{
+  /* Disable interrupts */
+  noInterrupts();
+
+  TCCR1A = 0;
+  TCCR1B = 0;
+  TCNT1 = 0;
+  DISABLE_TIMER; // Enable timer for compare interrupt
+
+  /* Reenable interrupts */
+  interrupts();
+}
+
 void setupTimer()
 {
   /* Disable interrupts */
@@ -501,6 +515,7 @@ void sendToDAC(float outputDAC)
 static void configState(void)
 {
   printMenuConfig();
+  delay(100);
 }
 
 static void processState(void)
@@ -620,6 +635,7 @@ void ISR_menuSelect(void) // Ou select
 {
   if (currentState == SCALE_STATE)
   {
+    deinitTimer();
     currentState = CONFIG_STATE;
     statePtr = configState;
   }
@@ -633,13 +649,13 @@ void ISR_menuSelect(void) // Ou select
     }
     else
     {
-
       currentState = SCALE_STATE;
       statePtr = scaleState;
     }
   }
   else if (currentState == BENCHMARK_STATE)
   {
+    deinitTimer();
     currentState = CONFIG_STATE;
     statePtr = configState;
   }
