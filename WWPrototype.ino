@@ -9,27 +9,27 @@
 // DÉFINITIONS PRÉPROCESSEUR //
 ///////////////////////////////
 
-#define V0            2.5                    // Tension centrale de référence pour la lame
-#define Vlim_Up       2                      // Limite maximale permise pour la monté de tension (provenant de l'erreur)
+#define V0             2.5                    // Tension centrale de référence pour la lame
+#define Vlim_Up        2                      // Limite maximale permise pour la monté de tension (provenant de l'erreur)
 
-#define pinADC        A15                    // Pin utilisé pour l'ADC servant à l'échantillonnage de tension
-#define ADC_RES       1023                   // Résolution (en bit) de l'ADC utilisé
-#define VREF          5                      // Tension de référence de l'ADC
+#define pinADC         A15                    // Pin utilisé pour l'ADC servant à l'échantillonnage de tension
+#define ADC_RES        1023                   // Résolution (en bit) de l'ADC utilisé
+#define VREF           5                      // Tension de référence de l'ADC
 
-#define pinMASSVOLTAGE    A14                    // Pin utilisé pour la lecture du courant
+#define pinMASSVOLTAGE A14                    // Pin utilisé pour la lecture du courant
 //#define PWM_PIN 12                         // PWM pin to control amplifier (basic PWM) // On peut enlever cette ligne là
 
-#define PRESCALER     256                    // Prescaler digital value
-#define BOARD_Freq    16000000               // Arduino Mega 2560 board frequency in Hz
+#define PRESCALER      256                    // Prescaler digital value
+#define BOARD_Freq     16000000               // Arduino Mega 2560 board frequency in Hz
 
-#define MAX_FREQ      145                    // Absolute maximum frequency with minimal LCD use
-#define FREQUENCY     145                    // Currently used frequency
+#define MAX_FREQ       145                    // Absolute maximum frequency with minimal LCD use
+#define FREQUENCY      145                    // Currently used frequency
 
-#define ENABLE_TIMER  TIMSK1 | (1 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à ON
-#define DISABLE_TIMER TIMSK1 | (0 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à OFF
+#define ENABLE_TIMER   TIMSK1 | (1 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à ON
+#define DISABLE_TIMER  TIMSK1 | (0 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à OFF
 
-#define MASS_ERROR    0.3                    // Erreur permise sur la masse lors de son calcul
-#define GRAMS_TO_OZ   0.035274               // Pente de conversion de gramme à once
+#define MASS_ERROR     0.3                    // Erreur permise sur la masse lors de son calcul
+#define GRAMS_TO_OZ    0.035274               // Pente de conversion de gramme à once
 
 /*#define Ku            0.008     // Ultimate gain
 #define tu            0.136     //Periode oscillations
@@ -78,12 +78,10 @@
 #define pinBUTTON_TARE 3
 
 /* Paramètres d'échantillonnage (mode normal et moyennage) */
-#define BUF_LEN 20    // Taille du buffer d'échantillons
-#define AVG_SAMPLES 3 // Nombre d'écahntillons pour faire la moyenne
+#define BUF_LEN     20 // Taille du buffer d'échantillons
+#define AVG_SAMPLES 3  // Nombre d'écahntillons pour faire la moyenne
 
-/* Indice de la pièce utilisée pour aider à calculer l'ordonnée dela courbe de
-   conversion*/
-#define INTERCEPT_CALCULATION_INDEX 5
+#define NUM_LCD_PRINTS 5
 
 
 ///////////////////////////////
@@ -125,8 +123,8 @@ uint8_t unit_index = 0;
 uint8_t type_index = 0;
 
 /* Pente et ordonnée de la calibration masse/courant */
-float penteMasseCourant = 1;
-float ordMasseCourant = 0;
+float penteMasseCourant = 65.16;
+float ordMasseCourant = tabCourantEtalons[0];
 
 /* Variables référant à la masse */
 float massTare = 0;
@@ -152,6 +150,9 @@ static mode_t selectedMode = MODE_NORMAL;
 /* Variables représentant les erreurs à travaer le temps (intégral et précédente) */
 static float int_err = 0;
 static float prev_err = 0;
+
+static uint8_t numPrintFirst = 0;
+static uint8_t numPrintSecond = 0;
 
 /* Valeur de sortie précédente */
 float last_output = 0;
@@ -253,19 +254,35 @@ void loop()
 ///////////////////////
 void printScaleFirstLine(void)
 {
-  lcd.setCursor(0, 0);
-  lcd.print("MASSE: ");
-  lcd.print((float)(currMass - massTare), 2);
-  lcd.print(currentUnit);
-  Serial.println((float)(currMass - massTare));
+  if (numPrintFirst == NUM_LCD_PRINTS)
+  {
+    lcd.setCursor(0, 0);
+    lcd.print("MASSE: ");
+    lcd.print((float)(currMass - massTare), 2);
+    lcd.print(currentUnit);
+    Serial.println((float)(currMass - massTare));
+    numPrintFirst = 0;
+  }
+  else
+  {
+    numPrintFirst++;
+  }
 }
 
 void printScaleSecondLine(void)
 {
-  lcd.setCursor(0, 1);
-  lcd.print(calculateNumCoins());
-  lcd.print(" x ");
-  lcd.print(currentType);
+  if (numPrintSecond == NUM_LCD_PRINTS)
+  {
+    lcd.setCursor(0, 1);
+    lcd.print(calculateNumCoins());
+    lcd.print(" x ");
+    lcd.print(currentType);
+    numPrintSecond = 0; 
+  }
+  else
+  {
+    numPrintSecond++;
+  }
 }
 
 void printMenuConfig(void)
@@ -402,7 +419,7 @@ static float apply_PID(float Vin)
   output = proportional_part + integral_part + differential_part;
   if (output >= Vlim_Up || output <= -Vlim_Up)
   {
-    Serial.println("Windup");
+//    Serial.println("Windup");
     int_err = temp_int; //Remet l'ancienne int_erre
     // Set value to absolute max
     integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
@@ -413,7 +430,7 @@ static float apply_PID(float Vin)
 
   if (abs(output) < (5 / ADC_RES))
   {
-    Serial.println("haha");
+//    Serial.println("haha");
     return 0.0;
   }
   //Le if, else if qui suit offre une protection pour de pas avoir des valeurs trop haute ou trop base. Important de la laisser car il arrive que la première erreur donne une erreur complètement erroné et que le PID diverge.
@@ -426,7 +443,6 @@ static float apply_PID(float Vin)
   else if (output > OUTPUT_MAX) // Vérifie que output respecte ça valeur max
   {
     Serial.println("Output max");
-
     output = OUTPUT_MAX;
   }
   sendToDAC(output);
@@ -485,7 +501,7 @@ void calculateAvgMass(void)
     sum += avgBuffer.pop();
   }
 
-  currMass = (float)(penteMasseCourant * (sum / AVG_SAMPLES) + ordMasseCourant);
+  currMass = (float)(penteMasseCourant * (float)(sum / AVG_SAMPLES) + ordMasseCourant);
   if (currentUnit == "oz")
   {
     currMass *= GRAMS_TO_OZ;
@@ -540,7 +556,7 @@ static void processState(void)
   for (int i = 0; i < NUM_ETALONS; i++) // Moyenne des coefficients
   {
     v_in = benchmarkBuffer.pop();
-    sommePentes += (float)(tabEtalons[i] / ((v_in * VREF) / ADC_RES));
+    sommePentes += (float)(tabEtalons[i] / (float)((v_in * VREF) / ADC_RES));
     tabCourantEtalons[i] = v_in;
 
     /* Petite animation durant l'état de processus */
@@ -551,7 +567,7 @@ static void processState(void)
   penteMasseCourant = sommePentes / NUM_ETALONS;
   ordMasseCourant = tabCourantEtalons[0];
 
-  currMass = (float)(penteMasseCourant * analogRead(pinMASSVOLTAGE) + ordMasseCourant);
+  currMass = (float)(penteMasseCourant*(float)analogRead(pinMASSVOLTAGE)+(float)ordMasseCourant);
 
   /* Réétablir la tare */
   massTare = currMass;
