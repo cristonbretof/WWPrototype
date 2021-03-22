@@ -160,7 +160,10 @@ static void processState(void);
 static void configState(void);
 static void scaleState(void);
 static float apply_PID(float Vin);
+
+/* Déclaration des fonctions init et deinit du timer d'échantillonnage */
 void setupTimer();
+void deinitTimer();
 
 /* Définitions des caractères spéciaux */
 byte up[8] = {
