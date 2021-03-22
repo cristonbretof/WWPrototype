@@ -3,76 +3,94 @@
 #include <CircularBuffer.h>
 #include <LiquidCrystal.h>
 
-#include <Wire.h> //Library for DAC
+#include <Wire.h>
 
-#define LED_PIN 13 // GPIO pin (on-board LED)
+///////////////////////////////
+// DÉFINITIONS PRÉPROCESSEUR //
+///////////////////////////////
 
-#define V0 2.5    // Voltage refering to home position of platform
-#define Vlim_Up 2 // Maximum allowed voltage to provide to amplifier
+#define V0            2.5                    // Tension centrale de référence pour la lame
+#define Vlim_Up       2                      // Limite maximale permise pour la monté de tension (provenant de l'erreur)
 
-#define pinADC A15   // Analog pin to read position input
-#define ADC_RES 1023 // Maximum resolution of analog to digital converter
-#define VREF 5       // ADC reference voltage
+#define pinADC        A15                    // Pin utilisé pour l'ADC servant à l'échantillonnage de tension
+#define ADC_RES       1023                   // Résolution (en bit) de l'ADC utilisé
+#define VREF          5                      // Tension de référence de l'ADC
 
-#define pinCURRENT A14 //
-#define PWM_PIN 12     // PWM pin to control amplifier (basic PWM)
+#define pinCURRENT    A14                    // Pin utilisé pour la lecture du courant
+//#define PWM_PIN 12                         // PWM pin to control amplifier (basic PWM) // On peut enlever cette ligne là
 
-#define PRESCALER 256       // Prescaler digital value
-#define BOARD_Freq 16000000 // Arduino Mega 2560 board frequency in Hz
+#define PRESCALER     256                    // Prescaler digital value
+#define BOARD_Freq    16000000               // Arduino Mega 2560 board frequency in Hz
 
-#define MAX_FREQ 145  // Absolute maximum frequency with minimal LCD use
-#define FREQUENCY 145 // Currently used frequency
+#define MAX_FREQ      145                    // Absolute maximum frequency with minimal LCD use
+#define FREQUENCY     145                    // Currently used frequency
 
-#define ENABLE_TIMER TIMSK1 | (1 << OCIE1A)
-#define DISABLE_TIMER TIMSK1 | (0 << OCIE1A)
+#define ENABLE_TIMER  TIMSK1 | (1 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à ON
+#define DISABLE_TIMER TIMSK1 | (0 << OCIE1A) // Macro pouvant changer le flag du timer d'échantillonnage à OFF
 
-#define MASS_ERROR 0.3
-#define GRAMS_TO_OZ 0.035274
+#define MASS_ERROR    0.3                    // Erreur permise sur la masse lors de son calcul
+#define GRAMS_TO_OZ   0.035274               // Pente de conversion de gramme à once
 
 /*#define Ku            0.008     // Ultimate gain
 #define tu            0.136     //Periode oscillations
 #define Ki            Kp/(tu/2)        // Integral gain
 #define Kd            Kp*(tu/3)         // Differential gain
 #define Kp            Ku/3 */
-// Proportional gain
 
-#define Kp 0.008
-#define Ki 0.06
-#define Kd 0.00003
+/* Gains pour le PID */
+#define Kp 0.008   // Gain proportionnel
+#define Ki 0.06    // Gain integral
+#define Kd 0.00003 // Gain différentiel
 
+/* Pins utilisées pour le LCD */
 #define pinRS 24
-#define pinE 26
+#define pinE  26
 #define pinD4 28
 #define pinD5 30
 #define pinD6 32
 #define pinD7 34
 
+/* Nombre de types, d'unités et d'étalons dans les tableaux */
 #define NUM_TYPES 7
 #define NUM_UNITS 2
+#define NUM_ETALONS 11
 
-#define DAC_RES 4096 // Maximum resolution of digital to analog converter
-#define DAC_VREF 5   // DAC reference voltage
-#define OUTPUT_MAX 2 // Offre une protection sur la valeur appliquer au DAC.
-#define OUTPUT_MIN 0 // Offre une protection sur la valeur appliquer au DAC.
+/* Configurations du DAC externe */
+#define DAC_RES    4096 // Maximum resolution of digital to analog converter
+#define DAC_VREF   5    // DAC reference voltage
+
+/* Valeurs maximales et minimales de sortie */
+#define OUTPUT_MAX 2    // Offre une protection sur la valeur appliquer au DAC
+#define OUTPUT_MIN 0    // Offre une protection sur la valeur appliquer au DAC
 
 //This is the I2C Address of the MCP4725, by default (A0 pulled to GND).
 //Please note that this breakout is for the MCP4725A0.
 #define MCP4725_ADDR 0x60
 //For devices with A0 pulled HIGH, use 0x61
 
+/* Nombre de boutons total sur le prototype */
 #define NUM_BUTTONS 4
 
-#define pinBUTTON_A 18
-#define pinBUTTON_B 2
+/* Définition des boutons utilisés pour le menu */
+#define pinBUTTON_A    18
+#define pinBUTTON_B    2
 #define pinBUTTON_MENU 19
 #define pinBUTTON_TARE 3
 
-#define BUF_LEN 20
-#define NUM_ETALONS 11
-#define AVG_SAMPLES 3
+/* Paramètres d'échantillonnage (mode normal et moyennage) */
+#define BUF_LEN 20    // Taille du buffer d'échantillons
+#define AVG_SAMPLES 3 // Nombre d'écahntillons pour faire la moyenne
 
+/* Indice de la pièce utilisée pour aider à calculer l'ordonnée dela courbe de
+   conversion*/
 #define INTERCEPT_CALCULATION_INDEX 5
 
+
+///////////////////////////////
+//   STRUCTURES DE DONNÉES   //
+///////////////////////////////
+
+/* Énumérateur pour chacun des états du système */
 typedef enum
 {
   CONFIG_STATE = 0,
@@ -81,6 +99,7 @@ typedef enum
   PROCESS_STATE = 3
 } state_t;
 
+/* Énumérateur pour les modes d'opération offerts */
 typedef enum
 {
   MODE_NORMAL = 0,
@@ -88,23 +107,27 @@ typedef enum
   MODE_ETALONNAGE = 2
 } mode_t;
 
-/* Symbol arrays */
+/* Tableaux 1D représentant respectivement les types, les unités et les étalons supportés */
 String typeArray[NUM_TYPES] = {"1c ", "5c ", "10c", "25c", "1$ ", "2$ ", "0  "};
-String unitArray[NUM_UNITS] = {"oz", "g "};
+String unitArray[NUM_UNITS] = {"oz", "g"};
+uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 
+/* Masses des pièces de monnaie canadienne */
 float massTypeGram[NUM_TYPES] = {2.35, 3.95, 1.75, 4.4, 6.9, 6.27, 6.92};
-float massTypeOunce[NUM_TYPES] = {0.07054792, 0.1058219, 0.03527396, 0.141096, 0.211644, 0.2116438, 0.2440958};
 
-/* Indices for type and unit ISRs */
+///////////////////////////////
+//    VARIABLES "GLOBALES"   //
+///////////////////////////////
+
+/* Indices initiaux pour les unités et les types */
 uint8_t unit_index = 0;
 uint8_t type_index = 0;
 
-/* Initial slope for current to mass conversion */
+/* Pente et ordonnée de la calibration masse/courant */
 float penteMasseCourant = 1;
 float ordMasseCourant = 0;
-uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 
-/* Main data configurations */
+/* Variables référant à la masse */
 float massTare = 0;
 float currMass = 0;
 float prevMass = 0;
@@ -118,29 +141,28 @@ String currentType;
 uint16_t currentStep = 0;
 uint8_t step_index = 0;
 
-/* Pointer to current state */
+/* Pointeur de fonction pour la machine à état */
 void (*statePtr)(void);
+
+/* Initialisation de l'état et du mode initiaux */
 static state_t currentState = CONFIG_STATE;
 static mode_t selectedMode = MODE_NORMAL;
 
-/* Array of all button pins */
-const uint8_t inputPins[NUM_BUTTONS] = {pinBUTTON_MENU, pinBUTTON_B, pinBUTTON_A, pinBUTTON_TARE};
-
-/* Error values declarations */
+/* Variables représentant les erreurs à travaer le temps (intégral et précédente) */
 static float int_err = 0;
 static float prev_err = 0;
 
-/* Dernier Output */
+/* Valeur de sortie précédente */
 float last_output = 0;
 
-/* Function declarations */
+/* Déclaration des fonctions pour la machine à état */
 static void processState(void);
 static void configState(void);
 static void scaleState(void);
 static float apply_PID(float Vin);
 void setupTimer();
 
-/* Up and down LCD character definitions */
+/* Définitions des caractères spéciaux */
 byte up[8] = {
     B00000,
     B00100,
@@ -186,20 +208,20 @@ CircularBuffer<uint16_t, NUM_ETALONS> benchmarkBuffer;
 LiquidCrystal lcd = LiquidCrystal(pinRS, pinE, pinD4, pinD5, pinD6, pinD7);
 
 ///////////////////////
-// ARDUINO FONCTIONS //
+// FONCTIONS ARDUINO //
 ///////////////////////
 
 void setup()
 {
   Serial.begin(9600);
 
-  /* Create both up and down arrows */
+  /* Création des caractères spéciaux */
   lcd.createChar(0, up);
   lcd.createChar(1, down);
   lcd.createChar(2, full);
   lcd.createChar(3, stable);
 
-  /* Initialize all button pins to interrupt */
+  /* Combinaison bouton/interruption  */
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_MENU), ISR_menuSelect, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_B), ISR_buttonB, FALLING);
   attachInterrupt(digitalPinToInterrupt(pinBUTTON_A), ISR_buttonA, FALLING);
@@ -208,13 +230,13 @@ void setup()
   /* Start the LCD display */
   lcd.begin(16, 2);
 
-  /*  */
+  /* Initier la phase de configuration */
   currentState = CONFIG_STATE;
   statePtr = configState;
 
-  /* Start CAD */
+  /* Amorcer le DAC */
   Wire.begin();
-  sendToDAC(0.0); //Reset la valeur du CAD
+  sendToDAC(0.0); //Reset la valeur du DAC
 }
 
 void loop()
