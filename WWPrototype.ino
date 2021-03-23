@@ -620,21 +620,19 @@ static void scaleState(void)
         avgBuffer.push(analogRead(pinMASSVOLTAGE));
       }
     }
+    currMass = (float)(penteMasseCourant * (float)analogRead(pinMASSVOLTAGE)*(float)(VREF/ADC_RES) + ordMasseCourant);
+    if (abs(currMass - prevMass) < MASS_ERROR)
+    {
+      printStabilitySymbol();
+    }
+    else
+    {
+      eraseStabilitySymbol();
+    }
+    prevMass = currMass;
+    printScaleFirstLine();
+    printScaleSecondLine();
   }
-  
-  currMass = (float)(penteMasseCourant * (float)analogRead(pinMASSVOLTAGE)*(float)(VREF/ADC_RES) + ordMasseCourant);
-  if (abs(currMass - prevMass) < MASS_ERROR)
-  {
-    printStabilitySymbol();
-  }
-  else
-  {
-    eraseStabilitySymbol();
-  }
-  prevMass = currMass;
-  printScaleFirstLine();
-  printScaleSecondLine();
-
 }
 
 /////////////////////
