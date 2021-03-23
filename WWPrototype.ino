@@ -52,7 +52,7 @@
 
 /* Nombre de types, d'unités et d'étalons dans les tableaux */
 #define NUM_TYPES 7
-#define NUM_UNITS 2
+#define NUM_UNITS 3
 #define NUM_ETALONS 11
 
 /* Configurations du DAC externe */
@@ -79,7 +79,8 @@
 
 /* Paramètres d'échantillonnage (mode normal et moyennage) */
 #define BUF_LEN     20 // Taille du buffer d'échantillons
-#define AVG_SAMPLES 20  // Nombre d'écahntillons pour faire la moyenne
+#define AVG_SAMPLES 50  // Nombre d'écahntillons pour faire la moyenne
+#define AVG_BenSample 5 // 
 
 #define NUM_LCD_PRINTS 1
 
@@ -106,8 +107,8 @@ typedef enum
 } mode_t;
 
 /* Tableaux 1D représentant respectivement les types, les unités et les étalons supportés */
-String typeArray[NUM_TYPES] = {"1c ", "5c ", "10c", "25c", "1$ ", "2$ ", "0  "};
-String unitArray[NUM_UNITS] = {"oz   ", "g   "};
+String typeArray[NUM_TYPES] = {"1c   ", "5c   ", "10c  ", "25c  ", "1$   ", "2$   ", "0    "};
+String unitArray[NUM_UNITS] = {"g   ", "oz   ",  "g   "};
 uint8_t tabEtalons[NUM_ETALONS] = {0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
 //uint8_t tabCourantEtalons[NUM_ETALONS] = {0.335, 0.49, 0.645, 0.81, 0.95, 1.1, 1.25, 1.4, 1.545, 1.695, 1.86};
 uint8_t tabCourantEtalons[NUM_ETALONS];
@@ -134,7 +135,7 @@ float prevMass = 0;
 uint8_t currNumCoins = 0;
 
 /* Unité et type actifs sur l'affichage */
-String currentUnit = unitArray[1];
+String currentUnit = unitArray[0];
 String currentType = typeArray[0];
 
 /* État actuel de l'étalonnage */
@@ -259,7 +260,16 @@ void printScaleFirstLine(void)
   {
     lcd.setCursor(0, 0);
     lcd.print("MASSE: ");
-    lcd.print((float)(currMass - massTare), 2);
+    
+    if (currentUnit == "oz   ")
+    {
+      lcd.print((float)((currMass - massTare)*GRAMS_TO_OZ), 2);
+    }
+    else
+    {
+      lcd.print((float)(currMass - massTare), 2);
+    }
+    
     lcd.print(currentUnit);
     numPrintFirst = 0;
   }
@@ -335,7 +345,7 @@ void printBenchmarkSteps(void)
 {
   lcd.clear();
   lcd.setCursor(0, 0);
-  if (currentStep > 0 && !benchmarkBuffer.isFull())
+  if (step_index > 0 && !benchmarkBuffer.isFull())
   {
     lcd.print("Posez une masse");
     lcd.setCursor(0, 1);
@@ -343,7 +353,7 @@ void printBenchmarkSteps(void)
     lcd.print(currentStep);
     lcd.print("g");
   }
-  else if (currentStep == 0)
+  else if (step_index == 0)
   {
     lcd.print("Retirez le poids");
     lcd.setCursor(0, 1);
@@ -400,15 +410,12 @@ static float apply_PID(float Vin)
   // Calculate positionning error
   float err = V0 - Vin;
 
-  // Record previous integral error to allow reset in case of windup
-  float temp_int = int_err;
-
   // Integrate error (sum it with previous errors)
   int_err += err;
 
   // Calculate differential error
   float diff_err = err - prev_err;
-  prev_err = err;
+
 
   // Calculate portions of PID
   float proportional_part = Kp * err;
@@ -416,17 +423,18 @@ static float apply_PID(float Vin)
   float differential_part = (Kd * diff_err / (float)(1 / (float)(FREQUENCY)));
 
   errTotal = proportional_part + integral_part + differential_part;
-  if (errTotal >= Vlim_Up || errTotal <= -Vlim_Up)
-  {
-    Serial.println("Windup");
-    int_err = temp_int; //Remet l'ancienne int_erre
-    // Set value to absolute max
-    integral_part = (Ki * int_err * (float)(1 / (float)(FREQUENCY)));
-    errTotal = proportional_part + integral_part + differential_part;
-  }
 
   output = last_output - errTotal; //Corrige la dernière tension appliquée.
 
+  if (output >= Vlim_Up || output < 0)
+  {
+    Serial.println("Windup");
+    int_err = 0; //Remet l'ancienne int_erre
+    return;
+  }
+
+  prev_err = err;
+  
   //Le if, else if qui suit offre une protection pour de pas avoir des valeurs trop haute ou trop base. Important de la laisser car il arrive que la première erreur donne une erreur complètement erroné et que le PID diverge.
   if (output < OUTPUT_MIN) // Vérifie que output respecte ça valeur min
   {
@@ -496,15 +504,16 @@ void calculateAvgMass(void)
   }
 
   currMass = (float)(penteMasseCourant * (float)(((float)(sum / AVG_SAMPLES)*VREF)/ADC_RES) + ordMasseCourant);
-  if (currentUnit == "oz")
-  {
-    currMass *= GRAMS_TO_OZ;
-  }
 }
 
 uint8_t calculateNumCoins(void)
 {
-  return (uint8_t)floor(currMass / massTypeGram[type_index]);
+  float mass = currMass - massTare;
+  if (mass < 0)
+  {
+    return 0;
+  }
+  return (uint8_t)round(mass / massTypeGram[type_index]);
 }
 
 void sendToDAC(float outputDAC)
@@ -622,6 +631,7 @@ static void scaleState(void)
   {
     eraseStabilitySymbol();
   }
+  prevMass = currMass;
   printScaleFirstLine();
   printScaleSecondLine();
 
@@ -741,8 +751,12 @@ void ISR_tare(void)
     }
     else
     {
-      uint16_t val = analogRead(pinMASSVOLTAGE);
-      incrementBenchmark(val);
+      uint16_t sum = 0;
+      for (int i = 0; i < AVG_BenSample; i++)
+      {
+         sum += analogRead(pinMASSVOLTAGE);
+      }      
+      incrementBenchmark((uint16_t)(sum/AVG_BenSample));
     }
   }
 }
